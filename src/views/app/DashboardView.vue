@@ -20,7 +20,9 @@ async function loadData() {
     const [todayTask, overview] = await Promise.allSettled([fetchTodayTask(), fetchStudyStatistics()])
     if (todayTask.status === 'fulfilled') task.value = todayTask.value
     if (overview.status === 'fulfilled') stats.value = overview.value
-    if (todayTask.status === 'rejected') error.value = todayTask.reason.message
+    if (todayTask.status === 'rejected') {
+      error.value = todayTask.reason.code === 30001 ? '' : todayTask.reason.message
+    }
   } finally {
     loading.value = false
   }
@@ -33,7 +35,9 @@ onMounted(loadData)
   <section>
     <PageHeader title="今日任务" subtitle="新词、复习和 AI 练习从这里开始">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
-      <el-button type="primary" :icon="Reading" @click="router.push('/app/study')">开始学习</el-button>
+      <el-button type="primary" :icon="Reading" @click="router.push(task ? '/app/study' : '/app/plans')">
+        {{ task ? '开始学习' : '创建计划' }}
+      </el-button>
     </PageHeader>
 
     <el-skeleton v-if="loading" :rows="6" animated />
@@ -54,8 +58,9 @@ onMounted(loadData)
               <el-tag :type="task?.status === 'DONE' ? 'success' : 'info'">{{ task?.status || '未生成' }}</el-tag>
             </div>
           </template>
-          <EmptyState v-if="!task" title="暂无今日任务" :description="error || '创建学习计划后会自动生成今日任务。'">
+          <EmptyState v-if="!task" title="先创建学习计划" :description="error || '选择一个词库和每日新词数量后，系统会自动生成今日任务。'">
             <el-button type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+            <el-button @click="router.push('/app/wordbooks')">选择词库</el-button>
           </EmptyState>
           <div v-else class="task-summary">
             <el-progress :percentage="task.progress?.completionRate ?? task.completionRate ?? 0" />

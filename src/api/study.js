@@ -1,7 +1,7 @@
 import { http } from './http'
 
 export function fetchTodayTask() {
-  return http.get('/api/v1/study/tasks/today')
+  return http.get('/api/v1/study/tasks/today', { silentError: true })
 }
 
 export function fetchTaskItemCard(itemId) {
@@ -13,7 +13,7 @@ export function submitTaskFeedback(itemId, payload) {
 }
 
 export function fetchPrimaryPlan() {
-  return http.get('/api/v1/study/plans/primary')
+  return http.get('/api/v1/study/plans/primary', { silentError: true })
 }
 
 export function createStudyPlan(payload) {

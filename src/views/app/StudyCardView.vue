@@ -1,16 +1,21 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
+const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const task = ref(null)
 const currentIndex = ref(0)
 const card = ref(null)
+const emptyTitle = ref('暂无待学习卡片')
+const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
+const needsPlan = ref(false)
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentItem = computed(() => pendingItems.value[currentIndex.value])
@@ -19,8 +24,19 @@ async function loadTask() {
   loading.value = true
   try {
     task.value = await fetchTodayTask()
+    needsPlan.value = false
+    emptyTitle.value = '暂无待学习卡片'
+    emptyDescription.value = '今日任务完成后可以回到首页查看统计。'
     currentIndex.value = 0
     await loadCard()
+  } catch (error) {
+    task.value = null
+    card.value = null
+    needsPlan.value = error.code === 30001
+    emptyTitle.value = needsPlan.value ? '先创建学习计划' : '暂时无法加载学习卡片'
+    emptyDescription.value = needsPlan.value
+      ? '选择词库并设置每日新词数量后，就可以开始第一组单词学习。'
+      : error.message
   } finally {
     loading.value = false
   }
@@ -56,7 +72,10 @@ onMounted(loadTask)
     </PageHeader>
 
     <el-skeleton v-if="loading" :rows="6" animated />
-    <EmptyState v-else-if="!card" title="暂无待学习卡片" description="今日任务完成后可以回到首页查看统计。" />
+    <EmptyState v-else-if="!card" :title="emptyTitle" :description="emptyDescription">
+      <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+      <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+    </EmptyState>
 
     <div v-else class="study-card-layout">
       <el-card class="study-word-card" shadow="never">

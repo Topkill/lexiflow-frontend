@@ -72,7 +72,9 @@ onMounted(loadPlan)
       <el-card class="panel-card" shadow="never">
         <template #header>当前主计划</template>
         <el-skeleton v-if="loading" :rows="4" animated />
-        <EmptyState v-else-if="!plan" title="暂无主计划" description="选择词库并创建计划后，今日任务会自动生成。" />
+        <EmptyState v-else-if="!plan" title="还没有学习计划" description="这是新用户的第一步：先选择词库，再设置每日新词数量。">
+          <el-button type="primary" @click="router.push('/app/wordbooks')">去选择词库</el-button>
+        </EmptyState>
         <div v-else class="plan-card-body">
           <div class="plan-title-row">
             <h2>{{ plan.wordbookName }}</h2>

@@ -31,8 +31,11 @@ http.interceptors.response.use(
     return body?.data ?? body
   },
   (error) => {
+    if (error.response?.data?.code) {
+      error.code = error.response.data.code
+    }
     const message = error.response?.data?.message || error.message || '网络请求失败'
-    if (error.response?.status !== 401) {
+    if (!error.config?.silentError && error.response?.status !== 401) {
       ElMessage.error(message)
     }
     return Promise.reject(error)
