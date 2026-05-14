@@ -44,7 +44,7 @@ async function submit() {
   await formRef.value.validate()
   saving.value = true
   try {
-    plan.value = await createStudyPlan({ ...form, wordbookId: Number(form.wordbookId) })
+    plan.value = await createStudyPlan({ ...form, wordbookId: String(form.wordbookId).trim() })
     ElMessage.success('学习计划已创建')
   } finally {
     saving.value = false
