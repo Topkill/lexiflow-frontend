@@ -1,10 +1,12 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Tickets } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import { fetchAdminWordbooks } from '../../api/admin'
 
+const router = useRouter()
 const loading = ref(false)
 const page = ref({ records: [], total: 0 })
 
@@ -35,6 +37,11 @@ onMounted(loadData)
         <el-table-column prop="wordCount" label="单词数" width="100" />
         <el-table-column prop="enabled" label="启用" width="100">
           <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="操作" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button text :icon="Tickets" @click="router.push(`/admin/words?wordbookId=${row.id}`)">单词</el-button>
+          </template>
         </el-table-column>
       </el-table>
     </el-card>
