@@ -469,6 +469,12 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.form-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .mt-16 {
   margin-top: 16px;
 }
@@ -566,7 +572,8 @@ a {
   }
 
   .plan-meta-grid,
-  .wordbook-meta {
+  .wordbook-meta,
+  .form-two-col {
     grid-template-columns: 1fr;
   }
 }
