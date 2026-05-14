@@ -444,12 +444,46 @@ a {
   font-size: 20px;
 }
 
+.definition-block.revealed {
+  border-left: 4px solid var(--primary);
+}
+
+.recall-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 118px;
+  margin: 0 auto 22px;
+  max-width: 720px;
+  padding: 18px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  text-align: center;
+}
+
+.recall-panel span {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.recall-panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .example-block p {
   margin: 0 0 8px;
 }
 
 .example-block span {
   color: var(--muted);
+}
+
+.feedback-hint {
+  max-width: 720px;
+  margin: 0 auto 22px;
 }
 
 .feedback-row {

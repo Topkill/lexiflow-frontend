@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { ChatLineRound, Cpu, MagicStick, Refresh, Sunny } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
@@ -14,6 +13,8 @@ const submitting = ref(false)
 const task = ref(null)
 const currentIndex = ref(0)
 const card = ref(null)
+const answerVisible = ref(false)
+const lastFeedback = ref('')
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
 const needsPlan = ref(false)
@@ -26,6 +27,10 @@ const aiType = ref('EXPLANATION')
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentItem = computed(() => pendingItems.value[currentIndex.value])
 const aiTitle = computed(() => ({ EXPLANATION: 'AI 单词讲解', EXAMPLES: 'AI 例句生成', MNEMONIC: 'AI 记忆法' })[aiType.value] || 'AI 辅助')
+const feedbackTip = computed(() => ({ UNKNOWN: '先看释义和例句，再尝试回忆一次；确认记住后点认识。', VAGUE: '再巩固一下这张卡片，能稳定想起后点认识。' })[lastFeedback.value] || '')
+const feedbackLabels = computed(() => (answerVisible.value
+  ? { unknown: '仍不认识', vague: '还是模糊', known: '认识了' }
+  : { unknown: '不认识', vague: '模糊', known: '认识' }))
 
 async function loadTask() {
   loading.value = true
@@ -55,15 +60,22 @@ async function loadCard() {
     return
   }
   card.value = await fetchTaskItemCard(currentItem.value.itemId)
+  answerVisible.value = false
+  lastFeedback.value = ''
 }
 
 async function feedback(value) {
   if (!card.value) return
+  if (!answerVisible.value && value !== 'KNOWN') {
+    answerVisible.value = true
+    lastFeedback.value = value
+  }
   submitting.value = true
   try {
     await submitTaskFeedback(card.value.itemId, { feedback: value, durationSeconds: 0 })
-    ElMessage.success('反馈已提交')
-    await loadTask()
+    if (value === 'KNOWN') {
+      await loadTask()
+    }
   } finally {
     submitting.value = false
   }
@@ -120,23 +132,30 @@ onMounted(loadTask)
         </div>
         <h1>{{ card.displayText }}</h1>
         <p class="phonetic">{{ card.phoneticUs || card.phoneticUk }}</p>
-        <div class="definition-block">
-          <span>{{ card.primaryPos }}</span>
-          <strong>{{ card.primaryDefinition }}</strong>
+        <div v-if="!answerVisible" class="recall-panel">
+          <span>先回忆释义</span>
+          <p>想不起或不确定时，点“不认识”或“模糊”查看答案并继续巩固。</p>
         </div>
-        <div v-if="card.exampleSentence" class="example-block">
-          <p>{{ card.exampleSentence }}</p>
-          <span>{{ card.exampleTranslation }}</span>
-        </div>
+        <template v-else>
+          <div class="definition-block revealed">
+            <span>{{ card.primaryPos }}</span>
+            <strong>{{ card.primaryDefinition }}</strong>
+          </div>
+          <div v-if="card.exampleSentence" class="example-block">
+            <p>{{ card.exampleSentence }}</p>
+            <span>{{ card.exampleTranslation }}</span>
+          </div>
+          <el-alert v-if="feedbackTip" class="feedback-hint" :title="feedbackTip" type="info" show-icon :closable="false" />
+        </template>
         <div class="ai-action-row">
           <el-button :icon="ChatLineRound" @click="openAi('EXPLANATION')">AI 讲解</el-button>
           <el-button :icon="MagicStick" @click="openAi('EXAMPLES')">AI 例句</el-button>
           <el-button :icon="Sunny" @click="openAi('MNEMONIC')">AI 记忆法</el-button>
         </div>
         <div class="feedback-row">
-          <el-button size="large" :loading="submitting" @click="feedback('UNKNOWN')">不认识</el-button>
-          <el-button size="large" :loading="submitting" @click="feedback('VAGUE')">模糊</el-button>
-          <el-button size="large" type="primary" :loading="submitting" @click="feedback('KNOWN')">认识</el-button>
+          <el-button size="large" :loading="submitting" @click="feedback('UNKNOWN')">{{ feedbackLabels.unknown }}</el-button>
+          <el-button size="large" :loading="submitting" @click="feedback('VAGUE')">{{ feedbackLabels.vague }}</el-button>
+          <el-button size="large" type="primary" :loading="submitting" @click="feedback('KNOWN')">{{ feedbackLabels.known }}</el-button>
         </div>
       </el-card>
 
