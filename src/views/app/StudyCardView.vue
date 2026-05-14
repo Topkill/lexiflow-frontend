@@ -1,15 +1,17 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChatLineRound, Cpu, MagicStick, Refresh, Sunny } from '@element-plus/icons-vue'
+import { ChatLineRound, Cpu, MagicStick, Refresh, Star, StarFilled, Sunny } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import { generateWordExamples, generateWordExplanation, generateWordMnemonic } from '../../api/ai'
+import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
 const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
+const favoriteOperating = ref(false)
 const task = ref(null)
 const currentIndex = ref(0)
 const card = ref(null)
@@ -81,6 +83,26 @@ async function feedback(value) {
   }
 }
 
+async function toggleFavorite() {
+  if (!card.value?.wordbookId || !card.value?.wordId) return
+  favoriteOperating.value = true
+  try {
+    if (card.value.favorite) {
+      if (card.value.favoriteWordId) {
+        await deleteFavoriteWord(card.value.favoriteWordId)
+      }
+      card.value.favorite = false
+      card.value.favoriteWordId = null
+    } else {
+      const favorite = await favoriteWord({ wordbookId: card.value.wordbookId, wordId: card.value.wordId })
+      card.value.favorite = true
+      card.value.favoriteWordId = favorite.favoriteWordId
+    }
+  } finally {
+    favoriteOperating.value = false
+  }
+}
+
 async function openAi(type) {
   aiType.value = type
   aiDialogVisible.value = true
@@ -126,9 +148,19 @@ onMounted(loadTask)
     <div v-else class="study-card-layout">
       <el-card class="study-word-card" shadow="never">
         <div class="word-kind-row">
-          <el-tag>{{ card.itemType }}</el-tag>
-          <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
-          <span>{{ card.masteryStatus }}</span>
+          <div class="word-card-meta">
+            <el-tag>{{ card.itemType }}</el-tag>
+            <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
+            <span>{{ card.masteryStatus }}</span>
+          </div>
+          <el-button
+            circle
+            :icon="card.favorite ? StarFilled : Star"
+            :type="card.favorite ? 'warning' : 'default'"
+            :loading="favoriteOperating"
+            :title="card.favorite ? '取消收藏' : '收藏单词'"
+            @click="toggleFavorite"
+          />
         </div>
         <h1>{{ card.displayText }}</h1>
         <p class="phonetic">{{ card.phoneticUs || card.phoneticUk }}</p>

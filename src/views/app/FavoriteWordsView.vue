@@ -1,11 +1,13 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Delete, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { fetchFavoriteWords } from '../../api/review'
+import { deleteFavoriteWord, fetchFavoriteWords } from '../../api/review'
 
 const loading = ref(false)
+const deletingId = ref('')
 const page = ref({ records: [], total: 0 })
 
 async function loadData() {
@@ -14,6 +16,17 @@ async function loadData() {
     page.value = await fetchFavoriteWords({ page: 1, size: 20 })
   } finally {
     loading.value = false
+  }
+}
+
+async function removeFavorite(row) {
+  deletingId.value = row.favoriteWordId
+  try {
+    await deleteFavoriteWord(row.favoriteWordId)
+    ElMessage.success('已取消收藏')
+    await loadData()
+  } finally {
+    deletingId.value = ''
   }
 }
 
@@ -33,6 +46,11 @@ onMounted(loadData)
         <el-table-column prop="primaryDefinition" label="释义" min-width="220" />
         <el-table-column prop="note" label="备注" min-width="160" />
         <el-table-column prop="createdAt" label="收藏时间" width="180" />
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="danger" :icon="Delete" :loading="deletingId === row.favoriteWordId" @click="removeFavorite(row)">取消</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </section>
