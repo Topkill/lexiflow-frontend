@@ -12,6 +12,7 @@ const loading = ref(false)
 const task = ref(null)
 const stats = ref(null)
 const error = ref('')
+const needsPlan = ref(false)
 
 async function loadData() {
   loading.value = true
@@ -21,7 +22,10 @@ async function loadData() {
     if (todayTask.status === 'fulfilled') task.value = todayTask.value
     if (overview.status === 'fulfilled') stats.value = overview.value
     if (todayTask.status === 'rejected') {
-      error.value = todayTask.reason.code === 30001 ? '' : todayTask.reason.message
+      needsPlan.value = todayTask.reason.code === 30001
+      error.value = needsPlan.value ? '' : todayTask.reason.message
+    } else {
+      needsPlan.value = false
     }
   } finally {
     loading.value = false
@@ -58,9 +62,14 @@ onMounted(loadData)
               <el-tag :type="task?.status === 'DONE' ? 'success' : 'info'">{{ task?.status || '未生成' }}</el-tag>
             </div>
           </template>
-          <EmptyState v-if="!task" title="先创建学习计划" :description="error || '选择一个词库和每日新词数量后，系统会自动生成今日任务。'">
-            <el-button type="primary" @click="router.push('/app/plans')">创建计划</el-button>
-            <el-button @click="router.push('/app/wordbooks')">选择词库</el-button>
+          <EmptyState
+            v-if="!task"
+            :title="needsPlan ? '先创建学习计划' : '今日任务加载失败'"
+            :description="needsPlan ? '选择一个词库和每日新词数量后，系统会自动生成今日任务。' : (error || '请稍后重试，或查看后端日志。')"
+          >
+            <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+            <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+            <el-button v-else type="primary" @click="loadData">重试</el-button>
           </EmptyState>
           <div v-else class="task-summary">
             <el-progress :percentage="task.progress?.completionRate ?? task.completionRate ?? 0" />
