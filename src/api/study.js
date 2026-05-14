@@ -4,6 +4,10 @@ export function fetchTodayTask() {
   return http.get('/api/v1/study/tasks/today', { silentError: true })
 }
 
+export function createWrongWordPractice(payload = {}) {
+  return http.post('/api/v1/study/tasks/today/wrong-word-practice', payload)
+}
+
 export function fetchTaskItemCard(itemId) {
   return http.get(`/api/v1/study/task-items/${itemId}/card`)
 }
