@@ -74,6 +74,10 @@ export function activateAdminAiPublicConfig(configId) {
   return http.post(`/api/v1/admin/ai/public-configs/${configId}/activate`)
 }
 
+export function enableAdminAiPublicConfig(configId) {
+  return http.post(`/api/v1/admin/ai/public-configs/${configId}/enable`)
+}
+
 export function disableAdminAiPublicConfig(configId) {
   return http.post(`/api/v1/admin/ai/public-configs/${configId}/disable`)
 }

@@ -1,13 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, CirclePlus, Edit, Refresh, TurnOff } from '@element-plus/icons-vue'
+import { Check, CirclePlus, Edit, Open, Refresh, TurnOff } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import {
   activateAdminAiPublicConfig,
   createAdminAiPublicConfig,
   disableAdminAiPublicConfig,
+  enableAdminAiPublicConfig,
   fetchAdminAiPublicConfigs,
   updateAdminAiPublicConfig,
 } from '../../api/admin'
@@ -132,6 +133,17 @@ async function activateConfig(row) {
   }
 }
 
+async function enableConfig(row) {
+  operatingId.value = row.id
+  try {
+    await enableAdminAiPublicConfig(row.id)
+    ElMessage.success('公共 AI 配置已启用')
+    await loadData()
+  } finally {
+    operatingId.value = ''
+  }
+}
+
 async function disableConfig(row) {
   await ElMessageBox.confirm(`确定停用「${row.name}」吗？停用后用户不能再使用该公共配置。`, '停用公共 AI 配置', {
     confirmButtonText: '停用',
@@ -185,9 +197,17 @@ onMounted(loadData)
           </template>
         </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button text :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+            <el-button
+              v-if="!row.enabled"
+              text
+              type="primary"
+              :icon="Open"
+              :loading="operatingId === row.id"
+              @click="enableConfig(row)"
+            >启用</el-button>
             <el-button
               text
               type="success"
@@ -197,10 +217,10 @@ onMounted(loadData)
               @click="activateConfig(row)"
             >激活</el-button>
             <el-button
+              v-if="row.enabled"
               text
               type="danger"
               :icon="TurnOff"
-              :disabled="!row.enabled"
               :loading="operatingId === row.id"
               @click="disableConfig(row)"
             >停用</el-button>
