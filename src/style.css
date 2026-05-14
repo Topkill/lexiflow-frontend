@@ -457,6 +457,55 @@ a {
   margin-top: 28px;
 }
 
+.ai-action-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.ai-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ai-brief,
+.ai-section p,
+.ai-example-item p {
+  margin: 0;
+  line-height: 1.75;
+}
+
+.ai-section,
+.ai-example-item {
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.ai-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.ai-section ul {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+.ai-example-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-example-item span {
+  color: var(--muted);
+}
+
 .feedback-row .el-button {
   min-width: 120px;
 }

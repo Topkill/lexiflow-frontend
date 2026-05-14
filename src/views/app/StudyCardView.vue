@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { ChatLineRound, Cpu, MagicStick, Refresh, Sunny } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
+import { generateWordExamples, generateWordExplanation, generateWordMnemonic } from '../../api/ai'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
 const router = useRouter()
@@ -16,9 +17,15 @@ const card = ref(null)
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
 const needsPlan = ref(false)
+const aiDialogVisible = ref(false)
+const aiLoading = ref(false)
+const aiRegenerating = ref(false)
+const aiResult = ref(null)
+const aiType = ref('EXPLANATION')
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentItem = computed(() => pendingItems.value[currentIndex.value])
+const aiTitle = computed(() => ({ EXPLANATION: 'AI 单词讲解', EXAMPLES: 'AI 例句生成', MNEMONIC: 'AI 记忆法' })[aiType.value] || 'AI 辅助')
 
 async function loadTask() {
   loading.value = true
@@ -62,6 +69,33 @@ async function feedback(value) {
   }
 }
 
+async function openAi(type) {
+  aiType.value = type
+  aiDialogVisible.value = true
+  await loadAiContent(false)
+}
+
+async function regenerateAi() {
+  await loadAiContent(true)
+}
+
+async function loadAiContent(regenerate) {
+  if (!card.value?.wordId || !card.value?.wordbookId) return
+  aiLoading.value = !regenerate
+  aiRegenerating.value = regenerate
+  try {
+    const requestMap = {
+      EXPLANATION: generateWordExplanation,
+      EXAMPLES: generateWordExamples,
+      MNEMONIC: generateWordMnemonic,
+    }
+    aiResult.value = await requestMap[aiType.value](card.value.wordId, card.value.wordbookId, regenerate)
+  } finally {
+    aiLoading.value = false
+    aiRegenerating.value = false
+  }
+}
+
 onMounted(loadTask)
 </script>
 
@@ -94,6 +128,11 @@ onMounted(loadTask)
           <p>{{ card.exampleSentence }}</p>
           <span>{{ card.exampleTranslation }}</span>
         </div>
+        <div class="ai-action-row">
+          <el-button :icon="ChatLineRound" @click="openAi('EXPLANATION')">AI 讲解</el-button>
+          <el-button :icon="MagicStick" @click="openAi('EXAMPLES')">AI 例句</el-button>
+          <el-button :icon="Sunny" @click="openAi('MNEMONIC')">AI 记忆法</el-button>
+        </div>
         <div class="feedback-row">
           <el-button size="large" :loading="submitting" @click="feedback('UNKNOWN')">不认识</el-button>
           <el-button size="large" :loading="submitting" @click="feedback('VAGUE')">模糊</el-button>
@@ -111,5 +150,59 @@ onMounted(loadTask)
         </div>
       </el-card>
     </div>
+
+    <el-dialog v-model="aiDialogVisible" :title="aiTitle" width="680px">
+      <el-skeleton v-if="aiLoading" :rows="6" animated />
+      <template v-else-if="aiResult?.content">
+        <div class="ai-content-panel">
+          <div class="card-header-row">
+            <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiResult.cacheHit ? '缓存命中' : '新生成' }}</el-tag>
+            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" @click="regenerateAi">重新生成</el-button>
+          </div>
+
+          <template v-if="aiType === 'EXPLANATION'">
+            <p class="ai-brief">{{ aiResult.content.brief }}</p>
+            <div v-if="aiResult.content.usage?.length" class="ai-section">
+              <h3>常见用法</h3>
+              <ul><li v-for="item in aiResult.content.usage" :key="item">{{ item }}</li></ul>
+            </div>
+            <div v-if="aiResult.content.confusingWords?.length" class="ai-section">
+              <h3>近义词或易混词</h3>
+              <ul><li v-for="item in aiResult.content.confusingWords" :key="item">{{ item }}</li></ul>
+            </div>
+            <div v-if="aiResult.content.scenes?.length" class="ai-section">
+              <h3>使用场景</h3>
+              <ul><li v-for="item in aiResult.content.scenes" :key="item">{{ item }}</li></ul>
+            </div>
+          </template>
+
+          <template v-else-if="aiType === 'EXAMPLES'">
+            <div v-for="level in ['simple', 'medium', 'examStyle']" :key="level" class="ai-example-item">
+              <el-tag>{{ { simple: '简单', medium: '中等', examStyle: '考试风格' }[level] }}</el-tag>
+              <p>{{ aiResult.content[level]?.sentence }}</p>
+              <span>{{ aiResult.content[level]?.translation }}</span>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="ai-section">
+              <h3>联想记忆</h3>
+              <p>{{ aiResult.content.association }}</p>
+            </div>
+            <div class="ai-section">
+              <h3>词根词缀</h3>
+              <p>{{ aiResult.content.rootsAffixes }}</p>
+            </div>
+            <div v-if="aiResult.content.pitfalls?.length" class="ai-section">
+              <h3>易错提醒</h3>
+              <ul><li v-for="item in aiResult.content.pitfalls" :key="item">{{ item }}</li></ul>
+            </div>
+          </template>
+        </div>
+      </template>
+      <EmptyState v-else title="暂无 AI 内容" description="请稍后重试，或检查 AI 配置是否可用。">
+        <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
+      </EmptyState>
+    </el-dialog>
   </section>
 </template>

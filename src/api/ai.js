@@ -1,5 +1,17 @@
 import { http } from './http'
 
+export function generateWordExplanation(wordId, wordbookId, regenerate = false) {
+  return http.post(`/api/v1/ai/words/${wordId}/explanation`, null, { params: { wordbookId, regenerate } })
+}
+
+export function generateWordExamples(wordId, wordbookId, regenerate = false) {
+  return http.post(`/api/v1/ai/words/${wordId}/examples`, null, { params: { wordbookId, regenerate } })
+}
+
+export function generateWordMnemonic(wordId, wordbookId, regenerate = false) {
+  return http.post(`/api/v1/ai/words/${wordId}/mnemonic`, null, { params: { wordbookId, regenerate } })
+}
+
 export function createClozeTask(payload) {
   return http.post('/api/v1/ai/cloze-tasks', payload)
 }
