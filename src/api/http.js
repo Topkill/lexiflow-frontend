@@ -21,6 +21,9 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => {
+    if (response.config.responseType === 'blob') {
+      return response
+    }
     const body = response.data
     if (body && typeof body.code === 'number' && body.code !== 0) {
       const error = new Error(body.message || '请求失败')

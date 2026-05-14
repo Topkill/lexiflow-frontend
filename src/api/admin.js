@@ -28,6 +28,32 @@ export function removeAdminWord(wordbookId, wordId) {
   return http.delete(`/api/v1/admin/wordbooks/${wordbookId}/words/${wordId}`)
 }
 
+export function downloadWordImportTemplate() {
+  return http.get('/api/v1/admin/imports/word-template', { responseType: 'blob' })
+}
+
+export function importAdminWords(wordbookId, duplicateStrategy, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/imports`, formData, {
+    params: { duplicateStrategy },
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  })
+}
+
+export function fetchWordImportTask(importTaskId) {
+  return http.get(`/api/v1/admin/imports/${importTaskId}`)
+}
+
+export function fetchWordImportErrors(importTaskId, params = {}) {
+  return http.get(`/api/v1/admin/imports/${importTaskId}/errors`, { params })
+}
+
+export function downloadWordImportErrorReport(importTaskId) {
+  return http.get(`/api/v1/admin/imports/${importTaskId}/error-report`, { responseType: 'blob' })
+}
+
 export function fetchAdminAiLogs(params = {}) {
   return http.get('/api/v1/admin/ai/call-logs', { params })
 }
