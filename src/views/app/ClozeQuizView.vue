@@ -38,6 +38,14 @@ const quizReady = computed(() => Boolean(quiz.value?.blanks?.length))
 const allAnswered = computed(() => quizReady.value && quiz.value.blanks.every((blank) => answers[blank.blankId]))
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
 const pendingCount = computed(() => todayTask.value?.items?.filter((item) => item.status === 'PENDING').length || 0)
+const taskDone = computed(() => todayTask.value?.status === 'DONE')
+const completedGroupReady = computed(() => taskDone.value && totalCount.value >= 10)
+const generateDisabled = computed(() => generating.value || (form.sourceType === 'COMPLETED_GROUP' && !completedGroupReady.value))
+const generateHint = computed(() => {
+  if (form.sourceType !== 'COMPLETED_GROUP' || completedGroupReady.value) return ''
+  if (!taskDone.value) return '完成今日学习组后才能生成本组 10 空完形填空。'
+  return '本组已完成单词不足 10 个，暂不能生成 10 空完形填空。'
+})
 const wrongAnswerMap = computed(() => {
   const map = new Map()
   ;(attempt.value?.answers || []).forEach((answer) => map.set(String(answer.blankId), answer))
@@ -53,6 +61,9 @@ async function loadTodayTask() {
   loadError.value = ''
   try {
     todayTask.value = await fetchTodayTask()
+    if (todayTask.value?.status !== 'DONE' && form.sourceType === 'COMPLETED_GROUP') {
+      form.sourceType = 'MIXED'
+    }
     needsPlan.value = false
   } catch (error) {
     todayTask.value = null
@@ -72,6 +83,10 @@ function resetQuizState() {
 async function generateQuiz() {
   if (!todayTask.value?.taskId) {
     ElMessage.warning('请先生成今日任务')
+    return
+  }
+  if (generateHint.value) {
+    ElMessage.warning(generateHint.value)
     return
   }
   generating.value = true
@@ -174,10 +189,11 @@ onMounted(async () => {
               <el-form-item label="目标词数">
                 <el-segmented v-model="form.targetWordCount" :options="targetOptions" :disabled="form.sourceType === 'COMPLETED_GROUP'" />
               </el-form-item>
-              <el-button type="primary" :loading="generating" @click="generateQuiz">
+              <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
                 {{ quiz ? '重新生成练习' : '生成练习' }}
               </el-button>
             </el-form>
+            <el-alert v-if="generateHint" class="mt-16" type="info" :title="generateHint" :closable="false" />
           </el-card>
 
           <el-card v-if="quiz" class="panel-card mt-16" shadow="never">
@@ -241,7 +257,7 @@ onMounted(async () => {
 
           <el-card v-else class="panel-card mt-16" shadow="never">
             <EmptyState title="还没有练习" description="完成一组单词后，系统会优先用不认识和模糊的词生成 10 空完形填空。">
-              <el-button type="primary" :loading="generating" @click="generateQuiz">生成练习</el-button>
+              <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
               <el-button @click="router.push('/app/study')">
                 去背单词
                 <el-icon><ArrowRight /></el-icon>
