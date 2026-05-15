@@ -34,6 +34,10 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem(CSRF_KEY, session.csrfToken || '')
       localStorage.setItem(USER_KEY, JSON.stringify(session.user))
     },
+    setUser(user) {
+      this.user = user
+      localStorage.setItem(USER_KEY, JSON.stringify(user))
+    },
     clearSession() {
       this.accessToken = null
       this.csrfToken = null
@@ -57,8 +61,7 @@ export const useAuthStore = defineStore('auth', {
     },
     async fetchMe() {
       const user = await authApi.fetchCurrentUser()
-      this.user = user
-      localStorage.setItem(USER_KEY, JSON.stringify(user))
+      this.setUser(user)
       return user
     },
     async bootstrap() {

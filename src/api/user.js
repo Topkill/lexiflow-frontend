@@ -8,6 +8,10 @@ export function updateProfile(payload) {
   return http.put('/api/v1/users/me/profile', payload)
 }
 
+export function changePassword(payload) {
+  return http.put('/api/v1/users/me/password', payload)
+}
+
 export function fetchUserSettings() {
   return http.get('/api/v1/users/me/settings')
 }
