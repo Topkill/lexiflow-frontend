@@ -19,6 +19,7 @@ const selectedWordbookId = ref('')
 const duplicateStrategy = ref('SKIP')
 const wordbooks = ref([])
 const selectedFile = ref(null)
+const uploadRef = ref()
 const importTask = ref(null)
 const errorPage = ref({ records: [], total: 0, page: 1, size: 20 })
 
@@ -65,6 +66,11 @@ function clearFile() {
   selectedFile.value = null
 }
 
+function resetUploadFile() {
+  selectedFile.value = null
+  uploadRef.value?.clearFiles()
+}
+
 async function submitImport() {
   if (!selectedWordbookId.value) {
     ElMessage.warning('请先选择词库')
@@ -77,8 +83,13 @@ async function submitImport() {
   uploading.value = true
   try {
     importTask.value = await importAdminWords(selectedWordbookId.value, duplicateStrategy.value, selectedFile.value)
-    ElMessage.success('导入完成')
-    selectedFile.value = null
+    if (importTask.value.failedRows) {
+      ElMessage.warning(`导入完成，${importTask.value.failedRows} 行失败`)
+    } else {
+      ElMessage.success('导入完成')
+    }
+    resetUploadFile()
+    await loadWordbooks()
     await loadErrors(1)
   } finally {
     uploading.value = false
@@ -133,7 +144,7 @@ onMounted(loadWordbooks)
             />
           </el-form-item>
           <el-form-item label="Excel 文件">
-            <el-upload drag accept=".xlsx" :auto-upload="false" :limit="1" :on-change="handleFileChange" :on-remove="clearFile">
+            <el-upload ref="uploadRef" drag accept=".xlsx" :auto-upload="false" :limit="1" :on-change="handleFileChange" :on-remove="clearFile">
               <el-icon><Upload /></el-icon>
               <div class="el-upload__text">拖拽文件到这里，或点击选择</div>
               <template #tip>
