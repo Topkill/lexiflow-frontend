@@ -24,6 +24,22 @@ export function fetchAdminWordbooks(params = {}) {
   return http.get('/api/v1/admin/wordbooks', { params })
 }
 
+export function createAdminWordbook(payload) {
+  return http.post('/api/v1/admin/wordbooks', payload)
+}
+
+export function updateAdminWordbook(wordbookId, payload) {
+  return http.put(`/api/v1/admin/wordbooks/${wordbookId}`, payload)
+}
+
+export function enableAdminWordbook(wordbookId) {
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/enable`)
+}
+
+export function disableAdminWordbook(wordbookId) {
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/disable`)
+}
+
 export function fetchAdminWords(wordbookId, params = {}) {
   return http.get(`/api/v1/admin/wordbooks/${wordbookId}/words`, { params })
 }
