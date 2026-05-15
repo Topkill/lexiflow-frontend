@@ -552,6 +552,109 @@ a {
   color: var(--muted);
 }
 
+.cloze-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 18px;
+  align-items: start;
+}
+
+.cloze-main {
+  min-width: 0;
+}
+
+.cloze-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.cloze-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.cloze-passage {
+  padding: 18px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.cloze-candidates,
+.candidate-buttons,
+.cloze-submit-row,
+.answer-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cloze-candidates {
+  margin-top: 16px;
+}
+
+.cloze-blank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.cloze-blank-item {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.blank-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.candidate-buttons {
+  margin-top: 12px;
+}
+
+.candidate-buttons .el-button {
+  margin-left: 0 !important;
+}
+
+.answer-result {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.result-correct {
+  color: var(--success);
+}
+
+.result-wrong {
+  color: var(--danger);
+}
+
+.cloze-explanation {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.cloze-submit-row {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.task-summary.compact {
+  gap: 14px;
+}
+
 .feedback-row .el-button {
   min-width: 120px;
 }
@@ -639,12 +742,14 @@ a {
   .metric-grid.wide,
   .wordbook-grid,
   .work-grid,
-  .study-card-layout {
+  .study-card-layout,
+  .cloze-layout {
     grid-template-columns: 1fr 1fr;
   }
 
   .study-card-layout,
-  .work-grid {
+  .work-grid,
+  .cloze-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -687,7 +792,18 @@ a {
 
   .plan-meta-grid,
   .wordbook-meta,
-  .form-two-col {
+  .form-two-col,
+  .cloze-form {
     grid-template-columns: 1fr;
+  }
+
+  .cloze-submit-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cloze-submit-row .el-button {
+    width: 100%;
+    margin-left: 0 !important;
   }
 }

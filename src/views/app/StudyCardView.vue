@@ -4,13 +4,14 @@ import { useRouter } from 'vue-router'
 import { ChatLineRound, Cpu, MagicStick, Refresh, Star, StarFilled, Sunny } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { generateWordExamples, generateWordExplanation, generateWordMnemonic } from '../../api/ai'
+import { createClozeTask, generateWordExamples, generateWordExplanation, generateWordMnemonic } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
 const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
+const generatingCloze = ref(false)
 const favoriteOperating = ref(false)
 const task = ref(null)
 const currentIndex = ref(0)
@@ -74,12 +75,33 @@ async function feedback(value) {
   }
   submitting.value = true
   try {
-    await submitTaskFeedback(card.value.itemId, { feedback: value, durationSeconds: 0 })
+    const response = await submitTaskFeedback(card.value.itemId, { feedback: value, durationSeconds: 0 })
     if (value === 'KNOWN') {
+      if (response.dailyTaskDone && task.value?.taskId) {
+        await generateCompletedGroupCloze(task.value.taskId)
+        return
+      }
       await loadTask()
     }
   } finally {
     submitting.value = false
+  }
+}
+
+async function generateCompletedGroupCloze(taskId) {
+  generatingCloze.value = true
+  try {
+    const task = await createClozeTask({ dailyTaskId: Number(taskId), sourceType: 'COMPLETED_GROUP', targetWordCount: 10 })
+    if (task.resultId) {
+      router.push({ path: '/app/cloze', query: { quizId: task.resultId, auto: '1' } })
+    } else {
+      await loadTask()
+    }
+  } catch (error) {
+    await loadTask()
+    throw error
+  } finally {
+    generatingCloze.value = false
   }
 }
 
@@ -185,9 +207,11 @@ onMounted(loadTask)
           <el-button :icon="Sunny" @click="openAi('MNEMONIC')">AI 记忆法</el-button>
         </div>
         <div class="feedback-row">
-          <el-button size="large" :loading="submitting" @click="feedback('UNKNOWN')">{{ feedbackLabels.unknown }}</el-button>
-          <el-button size="large" :loading="submitting" @click="feedback('VAGUE')">{{ feedbackLabels.vague }}</el-button>
-          <el-button size="large" type="primary" :loading="submitting" @click="feedback('KNOWN')">{{ feedbackLabels.known }}</el-button>
+          <el-button size="large" :loading="submitting" :disabled="generatingCloze" @click="feedback('UNKNOWN')">{{ feedbackLabels.unknown }}</el-button>
+          <el-button size="large" :loading="submitting" :disabled="generatingCloze" @click="feedback('VAGUE')">{{ feedbackLabels.vague }}</el-button>
+          <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="feedback('KNOWN')">
+            {{ generatingCloze ? '正在生成完形填空' : feedbackLabels.known }}
+          </el-button>
         </div>
       </el-card>
 
