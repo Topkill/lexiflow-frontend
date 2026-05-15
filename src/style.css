@@ -811,6 +811,12 @@ a {
     padding: 10px 16px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-nav::-webkit-scrollbar {
+    height: 4px;
   }
 
   .mobile-nav a {
@@ -818,9 +824,14 @@ a {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    min-width: max-content;
     padding: 8px 10px;
     border-radius: 8px;
     color: var(--muted);
+  }
+
+  .mobile-nav .el-icon {
+    flex: 0 0 auto;
   }
 
   .mobile-nav a.router-link-active {

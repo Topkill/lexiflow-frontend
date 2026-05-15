@@ -94,7 +94,7 @@ async function handleLogout() {
       </header>
 
       <nav class="mobile-nav">
-        <RouterLink v-for="item in menuItems.slice(0, 8)" :key="item.path" :to="item.path">
+        <RouterLink v-for="item in menuItems" :key="item.path" :to="item.path">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
         </RouterLink>
