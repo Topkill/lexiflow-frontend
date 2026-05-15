@@ -11,10 +11,11 @@ const loading = ref(false)
 const loadingTask = ref(false)
 const creating = ref(false)
 const selectedReport = ref(null)
-const page = ref({ records: [], total: 0 })
+const page = ref({ records: [], total: 0, page: 1, size: 10 })
 const todayTask = ref(null)
 const taskError = ref('')
 const form = reactive({ reportDate: new Date().toISOString().slice(0, 10) })
+const filters = reactive({ dateRange: [], page: 1, size: 10 })
 
 const summary = computed(() => selectedReport.value?.summary || {})
 const quizAccuracyText = computed(() => selectedReport.value?.quizAccuracy == null ? '暂无测验' : `${selectedReport.value.quizAccuracy}%`)
@@ -32,10 +33,21 @@ async function loadTodayTask() {
   }
 }
 
+function reportQueryParams() {
+  return {
+    page: filters.page,
+    size: filters.size,
+    startDate: filters.dateRange?.[0] || undefined,
+    endDate: filters.dateRange?.[1] || undefined,
+  }
+}
+
 async function loadReports(selectFirst = true) {
   loading.value = true
   try {
-    page.value = await fetchReports({ page: 1, size: 10 })
+    page.value = await fetchReports(reportQueryParams())
+    filters.page = Number(page.value.page || filters.page)
+    filters.size = Number(page.value.size || filters.size)
     if (selectFirst && page.value.records.length > 0) {
       selectedReport.value = page.value.records[0]
     }
@@ -59,6 +71,7 @@ async function createReport() {
     if (task.resultId) {
       selectedReport.value = await fetchReport(task.resultId)
     }
+    filters.page = 1
     await loadReports(false)
     ElMessage.success('学习报告已生成')
   } finally {
@@ -72,6 +85,21 @@ onMounted(async () => {
 
 async function refreshPage() {
   await Promise.all([loadTodayTask(), loadReports(false)])
+}
+
+function searchReports() {
+  filters.page = 1
+  loadReports(true)
+}
+
+function resetReportFilters() {
+  Object.assign(filters, { dateRange: [], page: 1 })
+  loadReports(true)
+}
+
+function handleReportPageChange(currentPage) {
+  filters.page = currentPage
+  loadReports(true)
 }
 </script>
 
@@ -104,21 +132,41 @@ async function refreshPage() {
 
         <el-card class="panel-card mt-16" shadow="never">
           <template #header>历史报告</template>
+          <div class="report-filter-row">
+            <el-date-picker v-model="filters.dateRange" value-format="YYYY-MM-DD" type="daterange" start-placeholder="开始日期" end-placeholder="结束日期" @change="searchReports" />
+            <div class="button-row">
+              <el-button size="small" @click="searchReports">筛选</el-button>
+              <el-button size="small" @click="resetReportFilters">重置</el-button>
+            </div>
+          </div>
           <el-skeleton v-if="loading" :rows="5" animated />
           <EmptyState v-else-if="page.records.length === 0" title="暂无学习报告" />
-          <div v-else class="report-list compact">
-            <button
-              v-for="report in page.records"
-              :key="report.id"
-              class="report-list-item"
-              :class="{ active: selectedReport?.id === report.id }"
-              type="button"
-              @click="selectReport(report)"
-            >
-              <strong>{{ report.reportDate }}</strong>
-              <span>新词 {{ report.newWordsCount }}，复习 {{ report.reviewWordsCount }}</span>
-            </button>
-          </div>
+          <template v-else>
+            <div class="report-list compact">
+              <button
+                v-for="report in page.records"
+                :key="report.id"
+                class="report-list-item"
+                :class="{ active: selectedReport?.id === report.id }"
+                type="button"
+                @click="selectReport(report)"
+              >
+                <strong>{{ report.reportDate }}</strong>
+                <span>新词 {{ report.newWordsCount }}，复习 {{ report.reviewWordsCount }}</span>
+              </button>
+            </div>
+            <div class="pagination-row">
+              <el-pagination
+                small
+                background
+                layout="total, prev, pager, next"
+                :current-page="Number(page.page)"
+                :page-size="Number(page.size)"
+                :total="Number(page.total)"
+                @current-change="handleReportPageChange"
+              />
+            </div>
+          </template>
         </el-card>
       </div>
 

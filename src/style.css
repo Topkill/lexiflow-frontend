@@ -682,6 +682,18 @@ a {
   gap: 8px;
 }
 
+.report-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.report-filter-row .el-date-editor {
+  flex: 1 1 260px;
+}
+
 .report-list-item {
   width: 100%;
   display: flex;
