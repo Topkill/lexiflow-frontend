@@ -59,11 +59,16 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+
+  if (to.meta.public) {
+    if (!auth.initialized && auth.accessToken) {
+      await auth.bootstrap()
+    }
+    return auth.isAuthenticated ? (auth.isAdmin ? '/admin' : '/app') : true
+  }
+
   await auth.bootstrap()
 
-  if (to.meta.public && auth.isAuthenticated) {
-    return auth.isAdmin ? '/admin' : '/app'
-  }
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
