@@ -35,7 +35,7 @@ npm run dev
 npm run build
 ```
 
-Vite 构建可能提示部分 chunk 偏大，这是当前后台页面和 Element Plus 合包后的提示，不影响本地演示。
+构建已配置 Vue、Element Plus、图标和公共依赖拆包，便于控制首屏资源体积和演示输出噪音。
 
 ## 演示账号
 
