@@ -8,6 +8,18 @@ export function fetchAdminUsers(params = {}) {
   return http.get('/api/v1/admin/users', { params })
 }
 
+export function fetchAdminUserDetail(userId) {
+  return http.get(`/api/v1/admin/users/${userId}`)
+}
+
+export function enableAdminUser(userId) {
+  return http.post(`/api/v1/admin/users/${userId}/enable`)
+}
+
+export function disableAdminUser(userId) {
+  return http.post(`/api/v1/admin/users/${userId}/disable`)
+}
+
 export function fetchAdminWordbooks(params = {}) {
   return http.get('/api/v1/admin/wordbooks', { params })
 }
