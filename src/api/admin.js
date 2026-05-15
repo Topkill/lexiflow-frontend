@@ -97,3 +97,15 @@ export function disableAdminAiPublicConfig(configId) {
 export function fetchSystemConfigs(params = {}) {
   return http.get('/api/v1/admin/system-configs', { params })
 }
+
+export function createSystemConfig(payload) {
+  return http.post('/api/v1/admin/system-configs', payload)
+}
+
+export function updateSystemConfig(configId, payload) {
+  return http.put(`/api/v1/admin/system-configs/${configId}`, payload)
+}
+
+export function deleteSystemConfig(configId) {
+  return http.delete(`/api/v1/admin/system-configs/${configId}`)
+}
