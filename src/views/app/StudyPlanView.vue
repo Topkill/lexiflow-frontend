@@ -1,18 +1,21 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import { createStudyPlan, endStudyPlan, fetchPrimaryPlan, pauseStudyPlan, resumeStudyPlan } from '../../api/study'
+import { fetchWordbooks } from '../../api/wordbook'
 
 const route = useRoute()
 const router = useRouter()
 const formRef = ref()
 const loading = ref(false)
+const loadingWordbooks = ref(false)
 const saving = ref(false)
 const plan = ref(null)
+const wordbooks = ref([])
 
 const form = reactive({
   wordbookId: route.query.wordbookId || '',
@@ -22,11 +25,39 @@ const form = reactive({
   isPrimary: true,
 })
 
+const selectedWordbook = computed(() => wordbooks.value.find((item) => item.id === form.wordbookId))
+
 const rules = {
-  wordbookId: [{ required: true, message: '请输入词库 ID', trigger: 'blur' }],
+  wordbookId: [{ required: true, message: '请选择词库', trigger: 'change' }],
   name: [{ required: true, message: '请输入计划名称', trigger: 'blur' }],
   dailyNewWords: [{ required: true, message: '请输入每日新词数', trigger: 'blur' }],
   startDate: [{ required: true, message: '请选择开始日期', trigger: 'change' }],
+}
+
+function defaultPlanName(book = selectedWordbook.value) {
+  return book ? `${book.name} 学习计划` : ''
+}
+
+async function loadWordbooks() {
+  loadingWordbooks.value = true
+  try {
+    wordbooks.value = await fetchWordbooks()
+    const queryWordbookId = route.query.wordbookId ? String(route.query.wordbookId) : ''
+    if (queryWordbookId && wordbooks.value.some((item) => item.id === queryWordbookId)) {
+      form.wordbookId = queryWordbookId
+    } else if (!form.wordbookId && wordbooks.value.length > 0) {
+      form.wordbookId = wordbooks.value[0].id
+    }
+    if (!form.name) {
+      form.name = defaultPlanName()
+    }
+  } finally {
+    loadingWordbooks.value = false
+  }
+}
+
+function handleWordbookChange() {
+  form.name = defaultPlanName()
 }
 
 async function loadPlan() {
@@ -58,7 +89,10 @@ async function changeStatus(action) {
   ElMessage.success('计划状态已更新')
 }
 
-onMounted(loadPlan)
+onMounted(() => {
+  loadWordbooks()
+  loadPlan()
+})
 </script>
 
 <template>
@@ -98,8 +132,10 @@ onMounted(loadPlan)
       <el-card class="panel-card" shadow="never">
         <template #header>创建新计划</template>
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-          <el-form-item label="词库 ID" prop="wordbookId">
-            <el-input v-model="form.wordbookId" placeholder="从词库页选择后自动带入" />
+          <el-form-item label="目标词库" prop="wordbookId">
+            <el-select v-model="form.wordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks" @change="handleWordbookChange">
+              <el-option v-for="book in wordbooks" :key="book.id" :label="`${book.name}（${book.wordCount || 0} 词）`" :value="book.id" />
+            </el-select>
           </el-form-item>
           <el-form-item label="计划名称" prop="name">
             <el-input v-model.trim="form.name" placeholder="例如 CET4 核心词计划" />
