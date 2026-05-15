@@ -667,6 +667,100 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.report-layout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.report-left {
+  min-width: 0;
+}
+
+.report-list.compact {
+  gap: 8px;
+}
+
+.report-list-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-list-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.report-list-item.active {
+  border-color: var(--primary);
+  background: #eef4ff;
+}
+
+.report-detail {
+  min-height: 520px;
+}
+
+.report-metrics,
+.report-summary-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.report-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.report-metrics div,
+.report-summary-item {
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.report-metrics span,
+.report-summary-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.report-metrics strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 22px;
+}
+
+.report-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.report-summary-item p {
+  margin: 8px 0 0;
+  line-height: 1.7;
+}
+
+.report-markdown {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
 .admin-filter-row {
   display: flex;
   align-items: center;
@@ -743,13 +837,15 @@ a {
   .wordbook-grid,
   .work-grid,
   .study-card-layout,
-  .cloze-layout {
+  .cloze-layout,
+  .report-layout {
     grid-template-columns: 1fr 1fr;
   }
 
   .study-card-layout,
   .work-grid,
-  .cloze-layout {
+  .cloze-layout,
+  .report-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -793,7 +889,9 @@ a {
   .plan-meta-grid,
   .wordbook-meta,
   .form-two-col,
-  .cloze-form {
+  .cloze-form,
+  .report-metrics,
+  .report-summary-grid {
     grid-template-columns: 1fr;
   }
 

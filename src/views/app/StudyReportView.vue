@@ -1,67 +1,170 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { createReportTask, fetchReports } from '../../api/ai'
+import { createReportTask, fetchReport, fetchReports } from '../../api/ai'
+import { fetchTodayTask } from '../../api/study'
 
 const loading = ref(false)
+const loadingTask = ref(false)
 const creating = ref(false)
+const selectedReport = ref(null)
 const page = ref({ records: [], total: 0 })
-const form = reactive({ reportDate: new Date().toISOString().slice(0, 10), regenerate: false })
+const todayTask = ref(null)
+const taskError = ref('')
+const form = reactive({ reportDate: new Date().toISOString().slice(0, 10) })
 
-async function loadReports() {
+const summary = computed(() => selectedReport.value?.summary || {})
+const quizAccuracyText = computed(() => selectedReport.value?.quizAccuracy == null ? '暂无测验' : `${selectedReport.value.quizAccuracy}%`)
+
+async function loadTodayTask() {
+  loadingTask.value = true
+  taskError.value = ''
+  try {
+    todayTask.value = await fetchTodayTask()
+  } catch (error) {
+    todayTask.value = null
+    taskError.value = error.code === 30001 ? '先创建学习计划并完成今日任务后，再生成学习报告。' : error.message
+  } finally {
+    loadingTask.value = false
+  }
+}
+
+async function loadReports(selectFirst = true) {
   loading.value = true
   try {
     page.value = await fetchReports({ page: 1, size: 10 })
+    if (selectFirst && page.value.records.length > 0) {
+      selectedReport.value = page.value.records[0]
+    }
   } finally {
     loading.value = false
   }
 }
 
+async function selectReport(report) {
+  selectedReport.value = await fetchReport(report.id)
+}
+
 async function createReport() {
+  if (!todayTask.value?.taskId) {
+    ElMessage.warning(taskError.value || '请先生成今日任务')
+    return
+  }
   creating.value = true
   try {
-    await createReportTask(form)
-    ElMessage.success('学习报告任务已创建')
-    loadReports()
+    const task = await createReportTask({ dailyTaskId: Number(todayTask.value.taskId), reportDate: form.reportDate })
+    if (task.resultId) {
+      selectedReport.value = await fetchReport(task.resultId)
+    }
+    await loadReports(false)
+    ElMessage.success('学习报告已生成')
   } finally {
     creating.value = false
   }
 }
 
-onMounted(loadReports)
+onMounted(async () => {
+  await Promise.all([loadTodayTask(), loadReports()])
+})
+
+async function refreshPage() {
+  await Promise.all([loadTodayTask(), loadReports(false)])
+}
 </script>
 
 <template>
   <section>
     <PageHeader title="学习报告" subtitle="每日完成学习后生成 AI 反馈">
-      <el-button :icon="Refresh" @click="loadReports">刷新</el-button>
+      <el-button :icon="Refresh" @click="refreshPage">刷新</el-button>
     </PageHeader>
-    <div class="work-grid">
-      <el-card class="panel-card" shadow="never">
-        <template #header>生成日报</template>
-        <el-form label-position="top">
-          <el-form-item label="报告日期">
-            <el-date-picker v-model="form.reportDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
-          </el-form-item>
-          <el-form-item label="重新生成">
-            <el-switch v-model="form.regenerate" />
-          </el-form-item>
-          <el-button type="primary" :loading="creating" @click="createReport">生成报告</el-button>
-        </el-form>
-      </el-card>
-      <el-card class="panel-card" shadow="never">
-        <template #header>历史报告</template>
-        <el-skeleton v-if="loading" :rows="5" animated />
-        <EmptyState v-else-if="page.records.length === 0" title="暂无学习报告" />
-        <div v-else class="report-list">
-          <div v-for="report in page.records" :key="report.id" class="list-row">
-            <strong>{{ report.reportDate }}</strong>
-            <span>新词 {{ report.newWordsCount }}，复习 {{ report.reviewWordsCount }}</span>
+
+    <div class="report-layout">
+      <div class="report-left">
+        <el-card class="panel-card" shadow="never" v-loading="loadingTask">
+          <template #header>生成日报</template>
+          <el-form label-position="top">
+            <el-form-item label="报告日期">
+              <el-date-picker v-model="form.reportDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
+            </el-form-item>
+            <el-alert
+              v-if="taskError"
+              class="mb-16"
+              type="warning"
+              :closable="false"
+              :title="taskError"
+            />
+            <el-button class="full-button" type="primary" :loading="creating" :disabled="!todayTask?.taskId" @click="createReport">
+              生成报告
+            </el-button>
+          </el-form>
+        </el-card>
+
+        <el-card class="panel-card mt-16" shadow="never">
+          <template #header>历史报告</template>
+          <el-skeleton v-if="loading" :rows="5" animated />
+          <EmptyState v-else-if="page.records.length === 0" title="暂无学习报告" />
+          <div v-else class="report-list compact">
+            <button
+              v-for="report in page.records"
+              :key="report.id"
+              class="report-list-item"
+              :class="{ active: selectedReport?.id === report.id }"
+              type="button"
+              @click="selectReport(report)"
+            >
+              <strong>{{ report.reportDate }}</strong>
+              <span>新词 {{ report.newWordsCount }}，复习 {{ report.reviewWordsCount }}</span>
+            </button>
           </div>
-        </div>
+        </el-card>
+      </div>
+
+      <el-card class="panel-card report-detail" shadow="never">
+        <template #header>
+          <div class="card-header-row">
+            <span>报告详情</span>
+            <el-tag v-if="selectedReport">{{ selectedReport.reportDate }}</el-tag>
+          </div>
+        </template>
+        <EmptyState v-if="!selectedReport" title="选择一份报告" description="生成或选择历史报告后，这里会展示 AI 学习建议。" />
+        <template v-else>
+          <div class="report-metrics">
+            <div>
+              <span>新词</span>
+              <strong>{{ selectedReport.newWordsCount }}</strong>
+            </div>
+            <div>
+              <span>复习</span>
+              <strong>{{ selectedReport.reviewWordsCount }}</strong>
+            </div>
+            <div>
+              <span>测验正确率</span>
+              <strong>{{ quizAccuracyText }}</strong>
+            </div>
+          </div>
+
+          <div class="report-summary-grid">
+            <div class="report-summary-item">
+              <span>表现总结</span>
+              <p>{{ summary.performance || '暂无总结' }}</p>
+            </div>
+            <div class="report-summary-item">
+              <span>薄弱点</span>
+              <p>{{ summary.weakness || '暂无薄弱点分析' }}</p>
+            </div>
+            <div class="report-summary-item">
+              <span>明日建议</span>
+              <p>{{ summary.tomorrowAdvice || '暂无建议' }}</p>
+            </div>
+          </div>
+
+          <div class="report-markdown">
+            {{ selectedReport.markdownContent || '暂无报告正文' }}
+          </div>
+        </template>
       </el-card>
     </div>
   </section>

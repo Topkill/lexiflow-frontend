@@ -31,3 +31,7 @@ export function createReportTask(payload) {
 export function fetchReports(params = {}) {
   return http.get('/api/v1/reports', { params })
 }
+
+export function fetchReport(reportId) {
+  return http.get(`/api/v1/reports/${reportId}`)
+}
