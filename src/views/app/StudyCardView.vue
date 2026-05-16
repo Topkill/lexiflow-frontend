@@ -34,6 +34,15 @@ const feedbackTip = computed(() => ({ UNKNOWN: '先看释义和例句，再尝�
 const feedbackLabels = computed(() => (answerVisible.value
   ? { unknown: '仍不认识', vague: '还是模糊', known: '认识了' }
   : { unknown: '不认识', vague: '模糊', known: '认识' }))
+const cardSentences = computed(() => {
+  if (!card.value?.sentences) return []
+  try {
+    const sentences = typeof card.value.sentences === 'string' ? JSON.parse(card.value.sentences) : card.value.sentences
+    return Array.isArray(sentences) ? sentences.slice(0, 3) : []
+  } catch {
+    return []
+  }
+})
 
 async function loadTask() {
   loading.value = true
@@ -184,8 +193,8 @@ onMounted(loadTask)
             @click="toggleFavorite"
           />
         </div>
-        <h1>{{ card.displayText }}</h1>
-        <p class="phonetic">{{ card.phoneticUs || card.phoneticUk }}</p>
+        <h1>{{ card.word }}</h1>
+        <p class="phonetic">{{ card.phonetic0 || card.phonetic1 }}</p>
         <div v-if="!answerVisible" class="recall-panel">
           <span>先回忆释义</span>
           <p>想不起或不确定时，点“不认识”或“模糊”查看答案并继续巩固。</p>
@@ -195,9 +204,9 @@ onMounted(loadTask)
             <span>{{ card.primaryPos }}</span>
             <strong>{{ card.primaryDefinition }}</strong>
           </div>
-          <div v-if="card.exampleSentence" class="example-block">
-            <p>{{ card.exampleSentence }}</p>
-            <span>{{ card.exampleTranslation }}</span>
+          <div v-for="sentence in cardSentences" :key="sentence.c" class="example-block">
+            <p>{{ sentence.c }}</p>
+            <span>{{ sentence.cn }}</span>
           </div>
           <el-alert v-if="feedbackTip" class="feedback-hint" :title="feedbackTip" type="info" show-icon :closable="false" />
         </template>

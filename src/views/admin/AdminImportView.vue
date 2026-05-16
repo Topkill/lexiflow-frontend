@@ -10,13 +10,18 @@ import {
   fetchAdminWordbooks,
   fetchWordImportErrors,
   importAdminWords,
+  importAdminWordsFromJsonUrl,
 } from '../../api/admin'
 
 const loadingWordbooks = ref(false)
 const uploading = ref(false)
+const importingJson = ref(false)
 const downloading = ref(false)
 const selectedWordbookId = ref('')
 const duplicateStrategy = ref('SKIP')
+const jsonDuplicateStrategy = ref('OVERWRITE')
+const jsonSourceUrl = ref('https://files.typewords.cc/dicts/en/word/CET4_T.json')
+const replaceWordbook = ref(true)
 const wordbooks = ref([])
 const selectedFile = ref(null)
 const uploadRef = ref()
@@ -96,6 +101,34 @@ async function submitImport() {
   }
 }
 
+async function submitJsonImport() {
+  if (!selectedWordbookId.value) {
+    ElMessage.warning('请先选择词库')
+    return
+  }
+  if (!jsonSourceUrl.value.trim()) {
+    ElMessage.warning('请填写 JSON URL')
+    return
+  }
+  importingJson.value = true
+  try {
+    importTask.value = await importAdminWordsFromJsonUrl(selectedWordbookId.value, {
+      sourceUrl: jsonSourceUrl.value.trim(),
+      duplicateStrategy: jsonDuplicateStrategy.value,
+      replaceWordbook: replaceWordbook.value,
+    })
+    if (importTask.value.failedRows) {
+      ElMessage.warning(`JSON 导入完成，${importTask.value.failedRows} 行失败`)
+    } else {
+      ElMessage.success('JSON 导入完成')
+    }
+    await loadWordbooks()
+    await loadErrors(1)
+  } finally {
+    importingJson.value = false
+  }
+}
+
 async function loadErrors(currentPage = errorPage.value.page) {
   if (!importTask.value?.id || !importTask.value.failedRows) {
     errorPage.value = { records: [], total: 0, page: 1, size: errorPage.value.size }
@@ -153,6 +186,34 @@ onMounted(loadWordbooks)
             </el-upload>
           </el-form-item>
           <el-button type="primary" :loading="uploading" @click="submitImport">开始导入</el-button>
+        </el-form>
+      </el-card>
+
+      <el-card class="panel-card" shadow="never">
+        <template #header>JSON URL 导入</template>
+        <el-form label-position="top">
+          <el-form-item label="目标词库">
+            <el-select v-model="selectedWordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks">
+              <el-option v-for="book in wordbooks" :key="book.id" :label="`${book.name} (${book.wordCount || 0})`" :value="book.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="JSON URL">
+            <el-input v-model.trim="jsonSourceUrl" placeholder="https://files.typewords.cc/dicts/en/word/CET4_T.json" />
+          </el-form-item>
+          <el-form-item label="重复处理策略">
+            <el-segmented
+              v-model="jsonDuplicateStrategy"
+              :options="[
+                { label: '跳过', value: 'SKIP' },
+                { label: '覆盖', value: 'OVERWRITE' },
+                { label: '补空', value: 'FILL_EMPTY' },
+              ]"
+            />
+          </el-form-item>
+          <el-form-item label="替换词库单词">
+            <el-switch v-model="replaceWordbook" active-text="先清空关联" inactive-text="追加导入" />
+          </el-form-item>
+          <el-button type="primary" :loading="importingJson" @click="submitJsonImport">导入 JSON</el-button>
         </el-form>
       </el-card>
 

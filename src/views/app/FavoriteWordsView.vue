@@ -85,7 +85,7 @@ onMounted(() => {
       <EmptyState v-else-if="page.records.length === 0" title="暂无收藏词" />
       <template v-else>
         <el-table :data="page.records">
-          <el-table-column prop="displayText" label="单词" min-width="140" />
+          <el-table-column prop="word" label="单词" min-width="140" />
           <el-table-column prop="primaryDefinition" label="释义" min-width="220" />
           <el-table-column prop="note" label="备注" min-width="160" />
           <el-table-column prop="createdAt" label="收藏时间" width="180" />

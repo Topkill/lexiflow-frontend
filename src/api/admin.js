@@ -70,6 +70,10 @@ export function importAdminWords(wordbookId, duplicateStrategy, file) {
   })
 }
 
+export function importAdminWordsFromJsonUrl(wordbookId, payload) {
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/imports/json-url`, payload, { timeout: 120000 })
+}
+
 export function fetchWordImportTask(importTaskId) {
   return http.get(`/api/v1/admin/imports/${importTaskId}`)
 }

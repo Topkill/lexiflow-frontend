@@ -24,15 +24,17 @@ const selectedWordbook = computed(() => wordbooks.value.find((item) => item.id =
 const dialogTitle = computed(() => (editingWord.value ? '编辑单词' : '新增单词'))
 
 const form = reactive({
-  wordText: '',
-  displayText: '',
-  phoneticUs: '',
-  phoneticUk: '',
-  meanings: '',
+  word: '',
+  phonetic0: '',
+  phonetic1: '',
+  trans: '',
+  sentences: '',
+  phrases: '',
+  synos: '',
+  relWords: '',
+  etymology: '',
   primaryPos: '',
   primaryDefinition: '',
-  exampleSentence: '',
-  exampleTranslation: '',
   tags: '',
   sequenceNo: 1,
   difficultyLevel: 2,
@@ -41,11 +43,34 @@ const form = reactive({
 })
 
 const rules = {
-  wordText: [{ required: true, message: '请输入英文单词', trigger: 'blur' }],
-  meanings: [{ required: true, message: '请输入释义', trigger: 'blur' }],
+  word: [{ required: true, message: '请输入英文单词', trigger: 'blur' }],
+  trans: [{ required: true, message: '请输入释义 JSON', trigger: 'blur' }],
   sequenceNo: [{ required: true, message: '请输入词库顺序', trigger: 'blur' }],
   difficultyLevel: [{ required: true, message: '请选择难度', trigger: 'blur' }],
   examFrequency: [{ required: true, message: '请输入考频', trigger: 'blur' }],
+}
+
+function prettyJson(value, fallback = '') {
+  if (!value) return fallback
+  try {
+    return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function compactJson(value) {
+  if (!value?.trim()) return null
+  return JSON.stringify(JSON.parse(value))
+}
+
+function firstSentence(row) {
+  try {
+    const sentences = typeof row.sentences === 'string' ? JSON.parse(row.sentences) : row.sentences
+    return Array.isArray(sentences) && sentences[0]?.c ? sentences[0].c : ''
+  } catch {
+    return ''
+  }
 }
 
 async function loadWordbooks() {
@@ -105,15 +130,17 @@ async function handleSizeChange(size) {
 function resetForm() {
   const nextSequenceNo = (selectedWordbook.value?.wordCount || 0) + 1
   Object.assign(form, {
-    wordText: '',
-    displayText: '',
-    phoneticUs: '',
-    phoneticUk: '',
-    meanings: '',
+    word: '',
+    phonetic0: '',
+    phonetic1: '',
+    trans: '[\n  {\n    "pos": "",\n    "cn": ""\n  }\n]',
+    sentences: '',
+    phrases: '',
+    synos: '',
+    relWords: '',
+    etymology: '',
     primaryPos: '',
     primaryDefinition: '',
-    exampleSentence: '',
-    exampleTranslation: '',
     tags: '',
     sequenceNo: nextSequenceNo,
     difficultyLevel: 2,
@@ -132,15 +159,17 @@ function openCreateDialog() {
 function openEditDialog(row) {
   editingWord.value = row
   Object.assign(form, {
-    wordText: row.wordText || '',
-    displayText: row.displayText || '',
-    phoneticUs: row.phoneticUs || '',
-    phoneticUk: row.phoneticUk || '',
-    meanings: row.primaryDefinition || row.wordText || '',
+    word: row.word || '',
+    phonetic0: row.phonetic0 || '',
+    phonetic1: row.phonetic1 || '',
+    trans: prettyJson(row.trans, '[\n  {\n    "pos": "",\n    "cn": ""\n  }\n]'),
+    sentences: prettyJson(row.sentences),
+    phrases: prettyJson(row.phrases),
+    synos: prettyJson(row.synos),
+    relWords: prettyJson(row.relWords),
+    etymology: prettyJson(row.etymology),
     primaryPos: row.primaryPos || '',
     primaryDefinition: row.primaryDefinition || '',
-    exampleSentence: row.exampleSentence || '',
-    exampleTranslation: row.exampleTranslation || '',
     tags: row.tags || '',
     sequenceNo: row.sequenceNo || 1,
     difficultyLevel: row.difficultyLevel || 2,
@@ -153,15 +182,17 @@ function openEditDialog(row) {
 
 function buildPayload() {
   return {
-    wordText: form.wordText.trim(),
-    displayText: form.displayText?.trim() || null,
-    phoneticUs: form.phoneticUs?.trim() || null,
-    phoneticUk: form.phoneticUk?.trim() || null,
-    meanings: form.meanings.trim(),
+    word: form.word.trim(),
+    phonetic0: form.phonetic0?.trim() || null,
+    phonetic1: form.phonetic1?.trim() || null,
+    trans: compactJson(form.trans),
+    sentences: compactJson(form.sentences),
+    phrases: compactJson(form.phrases),
+    synos: compactJson(form.synos),
+    relWords: compactJson(form.relWords),
+    etymology: compactJson(form.etymology),
     primaryPos: form.primaryPos?.trim() || null,
     primaryDefinition: form.primaryDefinition?.trim() || null,
-    exampleSentence: form.exampleSentence?.trim() || null,
-    exampleTranslation: form.exampleTranslation?.trim() || null,
     tags: form.tags?.trim() || null,
     sequenceNo: form.sequenceNo,
     difficultyLevel: form.difficultyLevel,
@@ -172,6 +203,12 @@ function buildPayload() {
 
 async function submitForm() {
   await formRef.value?.validate()
+  try {
+    buildPayload()
+  } catch {
+    ElMessage.warning('请检查 JSON 字段格式')
+    return
+  }
   saving.value = true
   try {
     if (editingWord.value) {
@@ -189,7 +226,7 @@ async function submitForm() {
 }
 
 async function removeWord(row) {
-  await ElMessageBox.confirm(`确定从当前词库移除「${row.displayText || row.wordText}」吗？`, '移除单词', {
+  await ElMessageBox.confirm(`确定从当前词库移除「${row.word}」吗？`, '移除单词', {
     confirmButtonText: '移除',
     cancelButtonText: '取消',
     type: 'warning',
@@ -238,10 +275,12 @@ onMounted(loadWordbooks)
       <template v-else>
         <el-table :data="page.records">
           <el-table-column prop="sequenceNo" label="顺序" width="90" />
-          <el-table-column prop="displayText" label="单词" min-width="150" />
+          <el-table-column prop="word" label="单词" min-width="150" />
           <el-table-column prop="primaryPos" label="词性" width="90" />
           <el-table-column prop="primaryDefinition" label="主释义" min-width="220" show-overflow-tooltip />
-          <el-table-column prop="exampleSentence" label="例句" min-width="260" show-overflow-tooltip />
+          <el-table-column label="例句" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">{{ firstSentence(row) }}</template>
+          </el-table-column>
           <el-table-column prop="difficultyLevel" label="难度" width="80" />
           <el-table-column prop="examFrequency" label="考频" width="80" />
           <el-table-column prop="enabled" label="启用" width="90">
@@ -274,19 +313,16 @@ onMounted(loadWordbooks)
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <div class="form-two-col">
-          <el-form-item label="英文单词" prop="wordText">
-            <el-input v-model.trim="form.wordText" placeholder="ability" />
-          </el-form-item>
-          <el-form-item label="展示单词">
-            <el-input v-model.trim="form.displayText" placeholder="留空默认使用英文单词" />
+          <el-form-item label="英文单词" prop="word">
+            <el-input v-model.trim="form.word" placeholder="ability" />
           </el-form-item>
         </div>
         <div class="form-two-col">
-          <el-form-item label="美式音标">
-            <el-input v-model.trim="form.phoneticUs" placeholder="/əˈbɪləti/" />
+          <el-form-item label="音标 0">
+            <el-input v-model.trim="form.phonetic0" placeholder="əˈbɪləti" />
           </el-form-item>
-          <el-form-item label="英式音标">
-            <el-input v-model.trim="form.phoneticUk" />
+          <el-form-item label="音标 1">
+            <el-input v-model.trim="form.phonetic1" />
           </el-form-item>
         </div>
         <div class="form-two-col">
@@ -297,14 +333,23 @@ onMounted(loadWordbooks)
             <el-input v-model.trim="form.primaryDefinition" placeholder="能力；才能" />
           </el-form-item>
         </div>
-        <el-form-item label="释义 JSON 或文本" prop="meanings">
-          <el-input v-model="form.meanings" type="textarea" :rows="3" placeholder="可先填写纯文本释义，后续再扩展为 JSON" />
+        <el-form-item label="释义 JSON" prop="trans">
+          <el-input v-model="form.trans" type="textarea" :rows="5" placeholder='[{"pos":"n.","cn":"能力；才能"}]' />
         </el-form-item>
-        <el-form-item label="英文例句">
-          <el-input v-model="form.exampleSentence" type="textarea" :rows="2" />
+        <el-form-item label="例句 JSON">
+          <el-input v-model="form.sentences" type="textarea" :rows="4" placeholder='[{"c":"Example sentence.","cn":"例句翻译。"}]' />
         </el-form-item>
-        <el-form-item label="例句翻译">
-          <el-input v-model="form.exampleTranslation" type="textarea" :rows="2" />
+        <el-form-item label="短语 JSON">
+          <el-input v-model="form.phrases" type="textarea" :rows="3" placeholder='[{"c":"take off","cn":"起飞；脱下"}]' />
+        </el-form-item>
+        <el-form-item label="同近义词 JSON">
+          <el-input v-model="form.synos" type="textarea" :rows="3" placeholder='[{"pos":"v.","cn":"取消","ws":["recall"]}]' />
+        </el-form-item>
+        <el-form-item label="相关词 JSON">
+          <el-input v-model="form.relWords" type="textarea" :rows="3" placeholder='{"root":"cancel","rels":[]}' />
+        </el-form-item>
+        <el-form-item label="词源 JSON">
+          <el-input v-model="form.etymology" type="textarea" :rows="3" placeholder='[{"t":"词源标题","d":"词源说明"}]' />
         </el-form-item>
         <el-form-item label="标签">
           <el-input v-model.trim="form.tags" placeholder="高频,核心" />
