@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowRight, Refresh, Reading } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -13,6 +13,14 @@ const task = ref(null)
 const stats = ref(null)
 const error = ref('')
 const needsPlan = ref(false)
+const primaryActionPath = computed(() => {
+  if (!task.value) return '/app/plans'
+  return task.value.status === 'DONE' ? '/app/cloze' : '/app/study'
+})
+const primaryActionLabel = computed(() => {
+  if (!task.value) return '创建计划'
+  return task.value.status === 'DONE' ? '生成练习' : '开始学习'
+})
 
 async function loadData() {
   loading.value = true
@@ -39,8 +47,8 @@ onMounted(loadData)
   <section>
     <PageHeader title="今日任务" subtitle="新词、复习和 AI 练习从这里开始">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
-      <el-button type="primary" :icon="Reading" @click="router.push(task ? '/app/study' : '/app/plans')">
-        {{ task ? '开始学习' : '创建计划' }}
+      <el-button type="primary" :icon="Reading" @click="router.push(primaryActionPath)">
+        {{ primaryActionLabel }}
       </el-button>
     </PageHeader>
 
@@ -78,8 +86,8 @@ onMounted(loadData)
               <span>复习 {{ task.reviewCount }}</span>
               <span>额外 {{ task.extraCount }}</span>
             </div>
-            <el-button type="primary" @click="router.push('/app/study')">
-              进入学习
+            <el-button type="primary" @click="router.push(task.status === 'DONE' ? '/app/cloze' : '/app/study')">
+              {{ task.status === 'DONE' ? '生成完形填空' : '进入学习' }}
               <el-icon><ArrowRight /></el-icon>
             </el-button>
           </div>

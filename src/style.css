@@ -431,10 +431,18 @@ a {
 }
 
 .phonetic {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
   margin: 12px 0 32px;
   color: var(--muted);
   text-align: center;
   font-size: 18px;
+}
+
+.phonetic span {
+  white-space: nowrap;
 }
 
 .definition-block,
@@ -517,6 +525,28 @@ a {
   gap: 16px;
 }
 
+.ai-question-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ai-question-word,
+.ai-tag-row,
+.ai-follow-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-question-word span {
+  min-width: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .ai-brief,
 .ai-section p,
 .ai-example-item p {
@@ -550,6 +580,13 @@ a {
 
 .ai-example-item span {
   color: var(--muted);
+}
+
+.ai-follow-row .el-button {
+  margin-left: 0 !important;
+  white-space: normal;
+  height: auto;
+  min-height: 32px;
 }
 
 .cloze-layout {

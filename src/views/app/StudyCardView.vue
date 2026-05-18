@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ChatLineRound, Cpu, MagicStick, Refresh, Star, StarFilled, Sunny } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ChatLineRound, Cpu, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { createClozeTask, generateWordExamples, generateWordExplanation, generateWordMnemonic } from '../../api/ai'
+import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
@@ -18,6 +19,8 @@ const currentIndex = ref(0)
 const card = ref(null)
 const answerVisible = ref(false)
 const lastFeedback = ref('')
+const reinforceHint = ref('')
+const reinforceCount = ref(0)
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
 const needsPlan = ref(false)
@@ -25,15 +28,15 @@ const aiDialogVisible = ref(false)
 const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiResult = ref(null)
-const aiType = ref('EXPLANATION')
+const aiQuestion = ref('')
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentItem = computed(() => pendingItems.value[currentIndex.value])
-const aiTitle = computed(() => ({ EXPLANATION: 'AI 单词讲解', EXAMPLES: 'AI 例句生成', MNEMONIC: 'AI 记忆法' })[aiType.value] || 'AI 辅助')
-const feedbackTip = computed(() => ({ UNKNOWN: '先看释义和例句，再尝试回忆一次；确认记住后点认识。', VAGUE: '再巩固一下这张卡片，能稳定想起后点认识。' })[lastFeedback.value] || '')
+const feedbackTip = computed(() => reinforceHint.value || ({ UNKNOWN: '先看释义和例句，再尝试回忆一次；确认记住后点认识。', VAGUE: '再巩固一下这张卡片，能稳定想起后点认识。' })[lastFeedback.value] || '')
 const feedbackLabels = computed(() => (answerVisible.value
   ? { unknown: '仍不认识', vague: '还是模糊', known: '认识了' }
   : { unknown: '不认识', vague: '模糊', known: '认识' }))
+const aiQuestionPlaceholder = computed(() => card.value?.word ? `例如：${card.value.word} 的反义词有哪些？` : '例如：这个词的反义词有哪些？')
 const cardSentences = computed(() => {
   if (!card.value?.sentences) return []
   try {
@@ -74,13 +77,27 @@ async function loadCard() {
   card.value = await fetchTaskItemCard(currentItem.value.itemId)
   answerVisible.value = false
   lastFeedback.value = ''
+  reinforceHint.value = ''
+  reinforceCount.value = 0
+  aiResult.value = null
+  aiQuestion.value = ''
 }
 
 async function feedback(value) {
   if (!card.value) return
+  if (answerVisible.value && value !== 'KNOWN') {
+    lastFeedback.value = value
+    reinforceCount.value += 1
+    reinforceHint.value = value === 'UNKNOWN'
+      ? `已保留在当前卡片，再读一遍释义和例句；记住后点“认识了”。${reinforceCount.value > 1 ? `已巩固 ${reinforceCount.value} 次。` : ''}`
+      : `已保留在当前卡片，先遮住释义回忆一次；稳定想起后点“认识了”。${reinforceCount.value > 1 ? `已巩固 ${reinforceCount.value} 次。` : ''}`
+    return
+  }
   if (!answerVisible.value && value !== 'KNOWN') {
     answerVisible.value = true
     lastFeedback.value = value
+    reinforceHint.value = ''
+    reinforceCount.value = 0
   }
   submitting.value = true
   try {
@@ -100,7 +117,10 @@ async function feedback(value) {
 async function generateCompletedGroupCloze(taskId) {
   generatingCloze.value = true
   try {
-    const task = await createClozeTask({ dailyTaskId: Number(taskId), sourceType: 'COMPLETED_GROUP', targetWordCount: 10 })
+    const task = await createClozeTask(
+      { dailyTaskId: Number(taskId), sourceType: 'COMPLETED_GROUP', targetWordCount: 10 },
+      { silentError: true },
+    )
     if (task.resultId) {
       router.push({ path: '/app/cloze', query: { quizId: task.resultId, auto: '1' } })
     } else {
@@ -108,7 +128,11 @@ async function generateCompletedGroupCloze(taskId) {
     }
   } catch (error) {
     await loadTask()
-    throw error
+    const message = error.code === 40001
+      ? '今日学习已完成，但 AI 配置不可用。可以先去 AI 配置页检查。'
+      : '今日学习已完成，但完形填空暂时生成失败。可以稍后在完形填空页重试。'
+    ElMessage.warning(message)
+    router.push({ path: '/app/cloze', query: { generateError: error.code === 40001 ? 'config' : 'ai' } })
   } finally {
     generatingCloze.value = false
   }
@@ -134,31 +158,42 @@ async function toggleFavorite() {
   }
 }
 
-async function openAi(type) {
-  aiType.value = type
+function openAiQuestion() {
   aiDialogVisible.value = true
-  await loadAiContent(false)
 }
 
-async function regenerateAi() {
-  await loadAiContent(true)
-}
-
-async function loadAiContent(regenerate) {
+async function askAi(regenerate = false) {
   if (!card.value?.wordId || !card.value?.wordbookId) return
+  const question = aiQuestion.value.trim()
+  if (!question) {
+    ElMessage.warning('请输入你想问的问题')
+    return
+  }
   aiLoading.value = !regenerate
   aiRegenerating.value = regenerate
   try {
-    const requestMap = {
-      EXPLANATION: generateWordExplanation,
-      EXAMPLES: generateWordExamples,
-      MNEMONIC: generateWordMnemonic,
-    }
-    aiResult.value = await requestMap[aiType.value](card.value.wordId, card.value.wordbookId, regenerate)
+    aiResult.value = await askWordQuestion(
+      card.value.wordId,
+      {
+        wordbookId: Number(card.value.wordbookId),
+        question,
+        regenerate,
+      },
+      { silentError: true },
+    )
+  } catch (error) {
+    ElMessage.warning(error.code === 40001
+      ? 'AI 配置不可用，请先检查公共配置或私有配置。'
+      : 'AI 问答暂时不可用，请稍后重试。')
   } finally {
     aiLoading.value = false
     aiRegenerating.value = false
   }
+}
+
+function useFollowUp(question) {
+  aiQuestion.value = question
+  askAi(false)
 }
 
 onMounted(loadTask)
@@ -182,7 +217,7 @@ onMounted(loadTask)
           <div class="word-card-meta">
             <el-tag>{{ card.itemType }}</el-tag>
             <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
-            <span>{{ card.masteryStatus }}</span>
+            <span v-if="card.masteryStatus && card.masteryStatus !== card.itemType">{{ card.masteryStatus }}</span>
           </div>
           <el-button
             circle
@@ -194,7 +229,10 @@ onMounted(loadTask)
           />
         </div>
         <h1>{{ card.word }}</h1>
-        <p class="phonetic">{{ card.phonetic0 || card.phonetic1 }}</p>
+        <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
+          <span v-if="card.phonetic0">英 {{ card.phonetic0 }}</span>
+          <span v-if="card.phonetic1">美 {{ card.phonetic1 }}</span>
+        </div>
         <div v-if="!answerVisible" class="recall-panel">
           <span>先回忆释义</span>
           <p>想不起或不确定时，点“不认识”或“模糊”查看答案并继续巩固。</p>
@@ -211,9 +249,7 @@ onMounted(loadTask)
           <el-alert v-if="feedbackTip" class="feedback-hint" :title="feedbackTip" type="info" show-icon :closable="false" />
         </template>
         <div class="ai-action-row">
-          <el-button :icon="ChatLineRound" @click="openAi('EXPLANATION')">AI 讲解</el-button>
-          <el-button :icon="MagicStick" @click="openAi('EXAMPLES')">AI 例句</el-button>
-          <el-button :icon="Sunny" @click="openAi('MNEMONIC')">AI 记忆法</el-button>
+          <el-button :icon="ChatLineRound" @click="openAiQuestion">AI 问答</el-button>
         </div>
         <div class="feedback-row">
           <el-button size="large" :loading="submitting" :disabled="generatingCloze" @click="feedback('UNKNOWN')">{{ feedbackLabels.unknown }}</el-button>
@@ -235,56 +271,56 @@ onMounted(loadTask)
       </el-card>
     </div>
 
-    <el-dialog v-model="aiDialogVisible" :title="aiTitle" width="680px">
-      <el-skeleton v-if="aiLoading" :rows="6" animated />
+    <el-dialog v-model="aiDialogVisible" title="AI 单词问答" width="680px">
+      <div class="ai-question-box">
+        <div class="ai-question-word">
+          <el-tag>{{ card?.word }}</el-tag>
+          <span>{{ card?.primaryDefinition }}</span>
+        </div>
+        <el-input
+          v-model.trim="aiQuestion"
+          type="textarea"
+          :rows="3"
+          maxlength="500"
+          show-word-limit
+          :placeholder="aiQuestionPlaceholder"
+        />
+        <div class="button-row">
+          <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
+          <el-button type="primary" :icon="ChatLineRound" :loading="aiLoading" @click="askAi(false)">提问</el-button>
+        </div>
+      </div>
+
+      <el-skeleton v-if="aiLoading" :rows="5" animated />
       <template v-else-if="aiResult?.content">
         <div class="ai-content-panel">
           <div class="card-header-row">
             <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiResult.cacheHit ? '缓存命中' : '新生成' }}</el-tag>
-            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" @click="regenerateAi">重新生成</el-button>
+            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" @click="askAi(true)">重新回答</el-button>
           </div>
 
-          <template v-if="aiType === 'EXPLANATION'">
-            <p class="ai-brief">{{ aiResult.content.brief }}</p>
-            <div v-if="aiResult.content.usage?.length" class="ai-section">
-              <h3>常见用法</h3>
-              <ul><li v-for="item in aiResult.content.usage" :key="item">{{ item }}</li></ul>
+          <p class="ai-brief">{{ aiResult.content.answer }}</p>
+          <div v-if="aiResult.content.keyPoints?.length" class="ai-section">
+            <h3>要点</h3>
+            <ul><li v-for="item in aiResult.content.keyPoints" :key="item">{{ item }}</li></ul>
+          </div>
+          <div v-if="aiResult.content.relatedWords?.length" class="ai-section">
+            <h3>相关词</h3>
+            <div class="ai-tag-row">
+              <el-tag v-for="item in aiResult.content.relatedWords" :key="item" effect="plain">{{ item }}</el-tag>
             </div>
-            <div v-if="aiResult.content.confusingWords?.length" class="ai-section">
-              <h3>近义词或易混词</h3>
-              <ul><li v-for="item in aiResult.content.confusingWords" :key="item">{{ item }}</li></ul>
+          </div>
+          <div v-if="aiResult.content.followUps?.length" class="ai-section">
+            <h3>继续追问</h3>
+            <div class="ai-follow-row">
+              <el-button v-for="item in aiResult.content.followUps" :key="item" size="small" plain @click="useFollowUp(item)">
+                {{ item }}
+              </el-button>
             </div>
-            <div v-if="aiResult.content.scenes?.length" class="ai-section">
-              <h3>使用场景</h3>
-              <ul><li v-for="item in aiResult.content.scenes" :key="item">{{ item }}</li></ul>
-            </div>
-          </template>
-
-          <template v-else-if="aiType === 'EXAMPLES'">
-            <div v-for="level in ['simple', 'medium', 'examStyle']" :key="level" class="ai-example-item">
-              <el-tag>{{ { simple: '简单', medium: '中等', examStyle: '考试风格' }[level] }}</el-tag>
-              <p>{{ aiResult.content[level]?.sentence }}</p>
-              <span>{{ aiResult.content[level]?.translation }}</span>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="ai-section">
-              <h3>联想记忆</h3>
-              <p>{{ aiResult.content.association }}</p>
-            </div>
-            <div class="ai-section">
-              <h3>词根词缀</h3>
-              <p>{{ aiResult.content.rootsAffixes }}</p>
-            </div>
-            <div v-if="aiResult.content.pitfalls?.length" class="ai-section">
-              <h3>易错提醒</h3>
-              <ul><li v-for="item in aiResult.content.pitfalls" :key="item">{{ item }}</li></ul>
-            </div>
-          </template>
+          </div>
         </div>
       </template>
-      <EmptyState v-else title="暂无 AI 内容" description="请稍后重试，或检查 AI 配置是否可用。">
+      <EmptyState v-else title="还没有提问" description="输入你对这个单词的疑问，例如反义词、语境差异或易混点。">
         <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
       </EmptyState>
     </el-dialog>

@@ -18,6 +18,7 @@ const quiz = ref(null)
 const attempt = ref(null)
 const needsPlan = ref(false)
 const loadError = ref('')
+const generateError = ref('')
 const startedAt = ref(null)
 const form = reactive({
   sourceType: 'COMPLETED_GROUP',
@@ -80,6 +81,14 @@ function resetQuizState() {
   Object.keys(answers).forEach((key) => delete answers[key])
 }
 
+function applyRouteGenerateError() {
+  if (route.query.generateError === 'config') {
+    generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
+  } else if (route.query.generateError === 'ai') {
+    generateError.value = 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。'
+  }
+}
+
 async function generateQuiz() {
   if (!todayTask.value?.taskId) {
     ElMessage.warning('请先生成今日任务')
@@ -90,13 +99,14 @@ async function generateQuiz() {
     return
   }
   generating.value = true
+  generateError.value = ''
   try {
     resetQuizState()
     const task = await createClozeTask({
       dailyTaskId: Number(todayTask.value.taskId),
       sourceType: form.sourceType,
       targetWordCount: form.sourceType === 'COMPLETED_GROUP' ? 10 : form.targetWordCount,
-    })
+    }, { silentError: true })
     const quizId = task.resultId
     if (!quizId) {
       throw new Error('完形填空生成成功，但没有返回题目 ID')
@@ -104,6 +114,10 @@ async function generateQuiz() {
     quiz.value = await fetchClozeQuiz(quizId)
     startedAt.value = Date.now()
     ElMessage.success('练习已生成')
+  } catch (error) {
+    generateError.value = error.code === 40001
+      ? 'AI 配置不可用，请先检查公共配置或私有配置。'
+      : 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。'
   } finally {
     generating.value = false
   }
@@ -147,6 +161,7 @@ function answerTagType(answer) {
 
 onMounted(async () => {
   await loadTodayTask()
+  applyRouteGenerateError()
   if (route.query.quizId) {
     await loadQuizById(route.query.quizId)
   }
@@ -194,6 +209,7 @@ onMounted(async () => {
               </el-button>
             </el-form>
             <el-alert v-if="generateHint" class="mt-16" type="info" :title="generateHint" :closable="false" />
+            <el-alert v-if="generateError" class="mt-16" type="warning" :title="generateError" :closable="false" />
           </el-card>
 
           <el-card v-if="quiz" class="panel-card mt-16" shadow="never">
@@ -256,7 +272,7 @@ onMounted(async () => {
           </el-card>
 
           <el-card v-else class="panel-card mt-16" shadow="never">
-            <EmptyState title="还没有练习" description="完成一组单词后，系统会优先用不认识和模糊的词生成 10 空完形填空。">
+            <EmptyState title="还没有练习" :description="generateError || '完成一组单词后，系统会优先用不认识和模糊的词生成 10 空完形填空。'">
               <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
               <el-button @click="router.push('/app/study')">
                 去背单词

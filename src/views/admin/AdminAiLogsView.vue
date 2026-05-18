@@ -7,7 +7,7 @@ import { fetchAdminAiLogs } from '../../api/admin'
 
 const scopeOptions = ['PUBLIC', 'PRIVATE']
 const statusOptions = ['SUCCESS', 'FAILED']
-const contentTypeOptions = ['WORD_EXPLANATION', 'EXAMPLE_SENTENCE', 'MNEMONIC', 'CLOZE_QUIZ', 'STUDY_REPORT']
+const contentTypeOptions = ['WORD_QA', 'CLOZE', 'REPORT', 'EXPLANATION', 'EXAMPLES', 'MNEMONIC']
 
 const loading = ref(false)
 const detailVisible = ref(false)

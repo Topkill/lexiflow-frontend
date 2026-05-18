@@ -1,19 +1,11 @@
 import { http } from './http'
 
-export function generateWordExplanation(wordId, wordbookId, regenerate = false) {
-  return http.post(`/api/v1/ai/words/${wordId}/explanation`, null, { params: { wordbookId, regenerate } })
+export function askWordQuestion(wordId, payload, config = {}) {
+  return http.post(`/api/v1/ai/words/${wordId}/questions`, payload, config)
 }
 
-export function generateWordExamples(wordId, wordbookId, regenerate = false) {
-  return http.post(`/api/v1/ai/words/${wordId}/examples`, null, { params: { wordbookId, regenerate } })
-}
-
-export function generateWordMnemonic(wordId, wordbookId, regenerate = false) {
-  return http.post(`/api/v1/ai/words/${wordId}/mnemonic`, null, { params: { wordbookId, regenerate } })
-}
-
-export function createClozeTask(payload) {
-  return http.post('/api/v1/ai/cloze-tasks', payload)
+export function createClozeTask(payload, config = {}) {
+  return http.post('/api/v1/ai/cloze-tasks', payload, config)
 }
 
 export function fetchClozeQuiz(quizId) {

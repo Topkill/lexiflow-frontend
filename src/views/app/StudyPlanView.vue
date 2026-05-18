@@ -77,6 +77,7 @@ async function submit() {
   try {
     plan.value = await createStudyPlan({ ...form, wordbookId: String(form.wordbookId).trim() })
     ElMessage.success('学习计划已创建')
+    router.push('/app')
   } finally {
     saving.value = false
   }
