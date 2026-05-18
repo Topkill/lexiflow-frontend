@@ -103,7 +103,7 @@ async function generateQuiz() {
   try {
     resetQuizState()
     const task = await createClozeTask({
-      dailyTaskId: Number(todayTask.value.taskId),
+      dailyTaskId: todayTask.value.taskId,
       sourceType: form.sourceType,
       targetWordCount: form.sourceType === 'COMPLETED_GROUP' ? 10 : form.targetWordCount,
     }, { silentError: true })
@@ -136,7 +136,7 @@ async function submitAnswers() {
     const durationSeconds = startedAt.value ? Math.max(0, Math.round((Date.now() - startedAt.value) / 1000)) : 0
     attempt.value = await submitClozeAttempt(quiz.value.quizId, {
       durationSeconds,
-      answers: quiz.value.blanks.map((blank) => ({ blankId: Number(blank.blankId), answer: answers[blank.blankId] })),
+      answers: quiz.value.blanks.map((blank) => ({ blankId: blank.blankId, answer: answers[blank.blankId] })),
     })
     ElMessage.success('答案已提交')
   } finally {

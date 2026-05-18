@@ -118,7 +118,7 @@ async function generateCompletedGroupCloze(taskId) {
   generatingCloze.value = true
   try {
     const task = await createClozeTask(
-      { dailyTaskId: Number(taskId), sourceType: 'COMPLETED_GROUP', targetWordCount: 10 },
+      { dailyTaskId: taskId, sourceType: 'COMPLETED_GROUP', targetWordCount: 10 },
       { silentError: true },
     )
     if (task.resultId) {
@@ -175,7 +175,7 @@ async function askAi(regenerate = false) {
     aiResult.value = await askWordQuestion(
       card.value.wordId,
       {
-        wordbookId: Number(card.value.wordbookId),
+        wordbookId: card.value.wordbookId,
         question,
         regenerate,
       },

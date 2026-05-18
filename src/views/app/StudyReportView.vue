@@ -67,7 +67,7 @@ async function createReport() {
   }
   creating.value = true
   try {
-    const task = await createReportTask({ dailyTaskId: Number(todayTask.value.taskId), reportDate: form.reportDate })
+    const task = await createReportTask({ dailyTaskId: todayTask.value.taskId, reportDate: form.reportDate })
     if (task.resultId) {
       selectedReport.value = await fetchReport(task.resultId)
     }
