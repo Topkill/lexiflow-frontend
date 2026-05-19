@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ArrowRight, Calendar, Collection, Refresh, Reading } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import MetricCard from '../../components/MetricCard.vue'
+import StarterPanel from '../../components/StarterPanel.vue'
 import { fetchTodayTask, fetchStudyStatistics } from '../../api/study'
 
 const router = useRouter()
@@ -69,24 +70,17 @@ onMounted(loadData)
               <el-tag :type="task?.status === 'DONE' ? 'success' : 'info'">{{ task?.status || '未生成' }}</el-tag>
             </div>
           </template>
-          <div
+          <StarterPanel
             v-if="!task"
-            class="starter-panel"
-            :class="{ 'is-error': !needsPlan }"
+            :title="needsPlan ? '先创建学习计划' : '今日任务加载失败'"
+            :description="needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (error || '请稍后重试，或查看后端日志。')"
+            :icon="needsPlan ? Calendar : Refresh"
+            :error="!needsPlan"
           >
-            <div class="starter-icon">
-              <el-icon><Calendar v-if="needsPlan" /><Refresh v-else /></el-icon>
-            </div>
-            <div class="starter-copy">
-              <h2>{{ needsPlan ? '先创建学习计划' : '今日任务加载失败' }}</h2>
-              <p>{{ needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (error || '请稍后重试，或查看后端日志。') }}</p>
-            </div>
-            <div class="starter-actions">
-              <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
-              <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
-              <el-button v-else type="primary" @click="loadData">重试</el-button>
-            </div>
-          </div>
+            <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+            <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+            <el-button v-else type="primary" @click="loadData">重试</el-button>
+          </StarterPanel>
           <div v-else class="task-summary">
             <el-progress :percentage="task.progress?.completionRate ?? task.completionRate ?? 0" />
             <div class="task-lines">

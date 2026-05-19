@@ -2,9 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
+import StarterPanel from '../../components/StarterPanel.vue'
 import { createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { fetchTodayTask } from '../../api/study'
 
@@ -178,14 +179,16 @@ onMounted(async () => {
 
     <template v-else>
       <el-card v-if="!todayTask" class="panel-card narrow" shadow="never">
-        <EmptyState
+        <StarterPanel
           :title="needsPlan ? '先创建学习计划' : '暂时无法加载今日任务'"
-          :description="needsPlan ? '创建计划并完成一组单词后，就可以生成 AI 完形填空。' : (loadError || '请稍后重试，或检查后端服务。')"
+          :description="needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (loadError || '请稍后重试，或检查后端服务。')"
+          :icon="needsPlan ? Calendar : Refresh"
+          :error="!needsPlan"
         >
           <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
           <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
           <el-button v-else type="primary" @click="loadTodayTask">重试</el-button>
-        </EmptyState>
+        </StarterPanel>
       </el-card>
 
       <div v-else class="cloze-layout">

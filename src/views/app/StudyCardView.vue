@@ -2,9 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ChatLineRound, Cpu, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
+import { Calendar, ChatLineRound, Cpu, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
+import StarterPanel from '../../components/StarterPanel.vue'
 import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
@@ -62,7 +63,7 @@ async function loadTask() {
     needsPlan.value = error.code === 30001
     emptyTitle.value = needsPlan.value ? '先创建学习计划' : '暂时无法加载学习卡片'
     emptyDescription.value = needsPlan.value
-      ? '选择词库并设置每日新词数量后，就可以开始第一组单词学习。'
+      ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。'
       : error.message
   } finally {
     loading.value = false
@@ -206,10 +207,18 @@ onMounted(loadTask)
     </PageHeader>
 
     <el-skeleton v-if="loading" :rows="6" animated />
-    <EmptyState v-else-if="!card" :title="emptyTitle" :description="emptyDescription">
-      <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
-      <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
-    </EmptyState>
+    <el-card v-else-if="!card" class="panel-card narrow" shadow="never">
+      <StarterPanel
+        :title="emptyTitle"
+        :description="emptyDescription"
+        :icon="needsPlan ? Calendar : Refresh"
+        :error="!needsPlan"
+      >
+        <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+        <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+        <el-button v-else type="primary" @click="loadTask">重试</el-button>
+      </StarterPanel>
+    </el-card>
 
     <div v-else class="study-card-layout">
       <el-card class="study-word-card" shadow="never">

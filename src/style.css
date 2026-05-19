@@ -986,7 +986,7 @@ a {
     flex: 0 0 auto;
   }
 
-  .mobile-nav a.router-link-active {
+  .mobile-nav a.router-link-exact-active {
     background: #eaf1ff;
     color: var(--primary);
   }

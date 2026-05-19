@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
-import EmptyState from '../../components/EmptyState.vue'
+import StarterPanel from '../../components/StarterPanel.vue'
 import { createStudyPlan, endStudyPlan, fetchPrimaryPlan, pauseStudyPlan, resumeStudyPlan } from '../../api/study'
 import { fetchWordbooks } from '../../api/wordbook'
 
@@ -90,6 +90,10 @@ async function changeStatus(action) {
   ElMessage.success('计划状态已更新')
 }
 
+function scrollToCreateForm() {
+  document.querySelector('.create-plan-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 onMounted(() => {
   loadWordbooks()
   loadPlan()
@@ -107,9 +111,15 @@ onMounted(() => {
       <el-card class="panel-card" shadow="never">
         <template #header>当前主计划</template>
         <el-skeleton v-if="loading" :rows="4" animated />
-        <EmptyState v-else-if="!plan" title="还没有学习计划" description="这是新用户的第一步：先选择词库，再设置每日新词数量。">
-          <el-button type="primary" @click="router.push('/app/wordbooks')">去选择词库</el-button>
-        </EmptyState>
+        <StarterPanel
+          v-else-if="!plan"
+          title="先创建学习计划"
+          description="选择词库并设置每日新词后，系统会自动生成今天的学习任务。"
+          :icon="Calendar"
+        >
+          <el-button type="primary" @click="scrollToCreateForm">创建计划</el-button>
+          <el-button @click="router.push('/app/wordbooks')">选择词库</el-button>
+        </StarterPanel>
         <div v-else class="plan-card-body">
           <div class="plan-title-row">
             <h2>{{ plan.wordbookName }}</h2>
@@ -130,7 +140,7 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <el-card class="panel-card" shadow="never">
+      <el-card class="panel-card create-plan-card" shadow="never">
         <template #header>创建新计划</template>
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
           <el-form-item label="目标词库" prop="wordbookId">
