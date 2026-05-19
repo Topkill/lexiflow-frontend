@@ -9,6 +9,13 @@ import StarterPanel from '../../components/StarterPanel.vue'
 import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
+import { useAuthStore } from '../../stores/auth'
+import {
+  cleanupExpiredStudyFlowStates,
+  readStudyFlowState,
+  removeStudyFlowState,
+  writeStudyFlowState,
+} from '../../utils/studyFlowStorage'
 
 const FLOW_SEGMENT = 'segment'
 const FLOW_RETRY = 'retry'
@@ -16,6 +23,7 @@ const PHASE_LEARN = 'learn'
 const PHASE_CONFIRM = 'confirm'
 
 const router = useRouter()
+const auth = useAuthStore()
 const loading = ref(false)
 const submitting = ref(false)
 const generatingCloze = ref(false)
@@ -154,14 +162,138 @@ function markFailedFeedbackSubmitted(itemId) {
   failedFeedbackItemIds.value = new Set([...failedFeedbackItemIds.value, String(itemId)])
 }
 
+function clampIndex(value, max) {
+  const index = Number(value)
+  if (!Number.isFinite(index) || index < 0) return 0
+  return Math.min(Math.floor(index), Math.max(0, max))
+}
+
+function getPlanId() {
+  return task.value?.plan?.id ?? task.value?.plan?.planId ?? task.value?.planId ?? null
+}
+
+function idsFromItems(items) {
+  return (items || []).map((item) => String(item?.itemId || '')).filter(Boolean)
+}
+
+function createPendingItemMap() {
+  return new Map(pendingItems.value.map((item) => [String(item.itemId), item]))
+}
+
+function idsFromPendingItems(items, itemMap = createPendingItemMap()) {
+  return idsFromItems(items).filter((itemId) => itemMap.has(itemId))
+}
+
+function itemsFromIds(ids, itemMap = createPendingItemMap()) {
+  const seen = new Set()
+  return (ids || []).reduce((items, id) => {
+    const key = String(id)
+    if (!key || seen.has(key)) return items
+    const item = itemMap.get(key)
+    if (item) {
+      seen.add(key)
+      items.push(item)
+    }
+    return items
+  }, [])
+}
+
+function firstAvailableBatchIndex(batches, preferredIndex) {
+  if (!batches.length) return -1
+  const forwardIndex = batches.findIndex((batch, index) => index >= preferredIndex && batch.length > 0)
+  if (forwardIndex >= 0) return forwardIndex
+  return batches.findIndex((batch) => batch.length > 0)
+}
+
+function resolveActiveIndex(items, activeItemId, fallbackIndex) {
+  const restoredIndex = items.findIndex((item) => String(item.itemId) === String(activeItemId))
+  if (restoredIndex >= 0) return restoredIndex
+  return clampIndex(fallbackIndex, items.length - 1)
+}
+
+function saveFlowState() {
+  if (!auth.user?.id || !task.value?.taskId) return
+  if (!pendingItems.value.length) {
+    clearFlowState()
+    return
+  }
+  const pendingItemMap = createPendingItemMap()
+  const currentItemId = currentItem.value?.itemId == null ? null : String(currentItem.value.itemId)
+  writeStudyFlowState(auth.user.id, task.value.taskId, {
+    planId: getPlanId() == null ? null : String(getPlanId()),
+    flowMode: flowMode.value,
+    phase: phase.value,
+    segmentIndex: segmentIndex.value,
+    activeIndex: activeIndex.value,
+    activeItemId: currentItemId && pendingItemMap.has(currentItemId) ? currentItemId : null,
+    itemBatchIds: itemBatches.value.map((batch) => idsFromPendingItems(batch, pendingItemMap)),
+    retryItemIds: idsFromPendingItems(retryItems.value, pendingItemMap),
+    nextRetryItemIds: idsFromPendingItems(nextRetryItems.value, pendingItemMap),
+    missedItemIds: idsFromPendingItems(missedItems.value, pendingItemMap),
+    failedFeedbackItemIds: [...failedFeedbackItemIds.value].filter((itemId) => pendingItemMap.has(String(itemId))),
+  })
+}
+
+function clearFlowState() {
+  if (!auth.user?.id || !task.value?.taskId) return
+  removeStudyFlowState(auth.user.id, task.value.taskId)
+}
+
+function restoreLocalFlow() {
+  if (!auth.user?.id || !task.value?.taskId) return false
+  const cache = readStudyFlowState(auth.user.id, task.value.taskId)
+  if (!cache || !pendingItems.value.length) return false
+
+  const pendingItemMap = createPendingItemMap()
+  const cachedBatches = Array.isArray(cache.itemBatchIds)
+    ? cache.itemBatchIds.map((ids) => itemsFromIds(ids, pendingItemMap))
+    : []
+  const restoredBatches = cachedBatches.some((batch) => batch.length > 0)
+    ? cachedBatches
+    : buildItemBatches(pendingItems.value)
+  const restoredFlowMode = cache.flowMode === FLOW_RETRY ? FLOW_RETRY : FLOW_SEGMENT
+  const restoredPhase = cache.phase === PHASE_CONFIRM ? PHASE_CONFIRM : PHASE_LEARN
+  const restoredRetryItems = itemsFromIds(cache.retryItemIds, pendingItemMap)
+
+  itemBatches.value = restoredBatches
+  flowMode.value = restoredFlowMode
+  phase.value = restoredPhase
+  retryItems.value = restoredRetryItems
+  nextRetryItems.value = itemsFromIds(cache.nextRetryItemIds, pendingItemMap)
+  missedItems.value = itemsFromIds(cache.missedItemIds, pendingItemMap)
+  failedFeedbackItemIds.value = new Set(
+    (cache.failedFeedbackItemIds || [])
+      .map((itemId) => String(itemId))
+      .filter((itemId) => pendingItemMap.has(itemId)),
+  )
+
+  if (flowMode.value === FLOW_RETRY) {
+    if (!retryItems.value.length) return false
+    segmentIndex.value = clampIndex(cache.segmentIndex, itemBatches.value.length - 1)
+    activeIndex.value = resolveActiveIndex(retryItems.value, cache.activeItemId, cache.activeIndex)
+  } else {
+    const preferredSegmentIndex = clampIndex(cache.segmentIndex, itemBatches.value.length - 1)
+    const availableSegmentIndex = firstAvailableBatchIndex(itemBatches.value, preferredSegmentIndex)
+    if (availableSegmentIndex < 0) return false
+    segmentIndex.value = availableSegmentIndex
+    activeIndex.value = resolveActiveIndex(currentSegmentItems.value, cache.activeItemId, cache.activeIndex)
+  }
+
+  saveFlowState()
+  return true
+}
+
 async function loadTask() {
   loading.value = true
   try {
+    cleanupExpiredStudyFlowStates()
     task.value = await fetchTodayTask()
     needsPlan.value = false
     emptyTitle.value = '暂无待学习卡片'
     emptyDescription.value = '今日任务完成后可以回到首页查看统计。'
-    resetLocalFlow()
+    if (!restoreLocalFlow()) {
+      resetLocalFlow()
+    }
     await loadCard()
   } catch (error) {
     task.value = null
@@ -176,7 +308,7 @@ async function loadTask() {
   }
 }
 
-function resetLocalFlow() {
+function resetLocalFlow(persist = true) {
   itemBatches.value = buildItemBatches(pendingItems.value)
   segmentIndex.value = 0
   activeIndex.value = 0
@@ -186,6 +318,11 @@ function resetLocalFlow() {
   nextRetryItems.value = []
   missedItems.value = []
   failedFeedbackItemIds.value = new Set()
+  if (!pendingItems.value.length) {
+    clearFlowState()
+  } else if (persist) {
+    saveFlowState()
+  }
 }
 
 async function loadCard() {
@@ -202,15 +339,18 @@ async function goNextLearnCard() {
   if (!card.value || submitting.value || generatingCloze.value) return
   if (flowMode.value === FLOW_RETRY) {
     phase.value = PHASE_CONFIRM
+    saveFlowState()
     return
   }
   if (activeIndex.value < activeItems.value.length - 1) {
     activeIndex.value += 1
+    saveFlowState()
     await loadCard()
     return
   }
   activeIndex.value = 0
   phase.value = PHASE_CONFIRM
+  saveFlowState()
   await loadCard()
 }
 
@@ -223,6 +363,7 @@ async function forgetCurrentCard() {
   } else {
     addUniqueItem(missedItems, item)
   }
+  saveFlowState()
   await advanceAfterConfirm()
 }
 
@@ -233,6 +374,7 @@ async function submitUnknownOnce(item) {
   try {
     await submitTaskFeedback(item.itemId, { feedback: 'UNKNOWN', durationSeconds: 0 })
     markFailedFeedbackSubmitted(itemId)
+    saveFlowState()
   } finally {
     submitting.value = false
   }
@@ -244,7 +386,9 @@ async function rememberCurrentCard() {
   try {
     const response = await submitTaskFeedback(card.value.itemId, { feedback: 'KNOWN', durationSeconds: 0 })
     applyFeedbackProgress(response)
+    saveFlowState()
     if (response.dailyTaskDone && task.value?.taskId) {
+      clearFlowState()
       await generateCompletedGroupCloze(task.value.taskId)
       return
     }
@@ -260,6 +404,7 @@ async function advanceAfterConfirm() {
     if (flowMode.value === FLOW_RETRY) {
       phase.value = PHASE_LEARN
     }
+    saveFlowState()
     await loadCard()
     return
   }
@@ -276,12 +421,14 @@ async function finishSegmentRound() {
     segmentIndex.value += 1
     activeIndex.value = 0
     phase.value = PHASE_LEARN
+    saveFlowState()
     await loadCard()
     return
   }
   if (missedItems.value.length > 0) {
-    await startRetryRound(missedItems.value)
+    const items = [...missedItems.value]
     missedItems.value = []
+    await startRetryRound(items)
     return
   }
   await loadTask()
@@ -293,6 +440,7 @@ async function startRetryRound(items) {
   nextRetryItems.value = []
   activeIndex.value = 0
   phase.value = PHASE_LEARN
+  saveFlowState()
   await loadCard()
 }
 
@@ -320,6 +468,7 @@ function applyFeedbackProgress(response) {
 }
 
 async function generateCompletedGroupCloze(taskId) {
+  clearFlowState()
   generatingCloze.value = true
   try {
     const task = await createClozeTask(
