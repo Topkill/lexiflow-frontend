@@ -33,6 +33,14 @@ const aiQuestion = ref('')
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentItem = computed(() => pendingItems.value[currentIndex.value])
+const totalItemCount = computed(() => task.value?.progress?.totalCount ?? task.value?.items?.length ?? 0)
+const completedItemCount = computed(() => task.value?.progress?.doneCount ?? task.value?.doneCount ?? 0)
+const remainingItemCount = computed(() => Math.max(0, totalItemCount.value - completedItemCount.value))
+const studyCompletionRate = computed(() => (
+  totalItemCount.value > 0
+    ? Math.min(100, Math.round((completedItemCount.value / totalItemCount.value) * 100))
+    : 0
+))
 const feedbackTip = computed(() => reinforceHint.value || ({ UNKNOWN: '先看释义和例句，再尝试回忆一次；确认记住后点认识。', VAGUE: '再巩固一下这张卡片，能稳定想起后点认识。' })[lastFeedback.value] || '')
 const feedbackLabels = computed(() => (answerVisible.value
   ? { unknown: '仍不认识', vague: '还是模糊', known: '认识了' }
@@ -42,11 +50,68 @@ const cardSentences = computed(() => {
   if (!card.value?.sentences) return []
   try {
     const sentences = typeof card.value.sentences === 'string' ? JSON.parse(card.value.sentences) : card.value.sentences
-    return Array.isArray(sentences) ? sentences.slice(0, 3) : []
+    return Array.isArray(sentences)
+      ? sentences.slice(0, 3).map((sentence, index) => {
+        const phrase = extractExamplePhrase(sentence.c, card.value?.word)
+        return {
+          ...sentence,
+          key: `${index}-${sentence.c || ''}`,
+          phrase,
+          highlightedEnglish: highlightExampleText(sentence.c, card.value?.word, phrase),
+        }
+      })
+      : []
   } catch {
     return []
   }
 })
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function extractExamplePhrase(text = '', word = '') {
+  if (!text || !word) return ''
+  const match = String(text).match(new RegExp(`\\b(${escapeRegExp(word)})\\b((?:\\s+[A-Za-z'-]+){0,2})`, 'i'))
+  if (!match) return ''
+
+  const nextWords = (match[2] || '')
+    .trim()
+    .split(/\s+/)
+    .map((item) => item.replace(/^[^A-Za-z]+|[^A-Za-z]+$/g, ''))
+    .filter(Boolean)
+  if (!nextWords.length) return ''
+
+  const firstWord = nextWords[0].toLowerCase()
+  const blockedFirstWords = new Set(['can', 'could', 'will', 'would', 'should', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'to', 'from', 'of', 'in', 'on', 'at', 'by', 'with', 'and', 'or', 'but'])
+  if (blockedFirstWords.has(firstWord)) return ''
+
+  const phraseWords = [match[1], nextWords[0]]
+  const bridgeWords = new Set(['my', 'your', 'his', 'her', 'our', 'their', 'the', 'a', 'an', 'this', 'that'])
+  if (bridgeWords.has(firstWord) && nextWords[1]) {
+    phraseWords.push(nextWords[1])
+  }
+  return phraseWords.join(' ')
+}
+
+function highlightExampleText(text = '', word = '', phrase = '') {
+  const escaped = escapeHtml(text)
+  if (phrase) {
+    const phrasePattern = escapeRegExp(phrase).replace(/\s+/g, '\\s+')
+    return escaped.replace(new RegExp(`\\b${phrasePattern}\\b`, 'i'), '<mark class="phrase-highlight">$&</mark>')
+  }
+  if (!word) return escaped
+  return escaped.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), '<mark class="word-highlight">$&</mark>')
+}
 
 async function loadTask() {
   loading.value = true
@@ -104,6 +169,7 @@ async function feedback(value) {
   try {
     const response = await submitTaskFeedback(card.value.itemId, { feedback: value, durationSeconds: 0 })
     if (value === 'KNOWN') {
+      applyFeedbackProgress(response)
       if (response.dailyTaskDone && task.value?.taskId) {
         await generateCompletedGroupCloze(task.value.taskId)
         return
@@ -112,6 +178,21 @@ async function feedback(value) {
     }
   } finally {
     submitting.value = false
+  }
+}
+
+function applyFeedbackProgress(response) {
+  if (!task.value || !response?.taskProgress) return
+  const item = task.value.items?.find((taskItem) => String(taskItem.itemId) === String(response.itemId))
+  if (item) {
+    item.status = response.status
+    item.feedback = response.feedback
+  }
+  task.value.doneCount = response.taskProgress.doneCount
+  task.value.completionRate = response.taskProgress.completionRate
+  task.value.progress = response.taskProgress
+  if (response.dailyTaskDone) {
+    task.value.status = 'DONE'
   }
 }
 
@@ -251,9 +332,13 @@ onMounted(loadTask)
             <span>{{ card.primaryPos }}</span>
             <strong>{{ card.primaryDefinition }}</strong>
           </div>
-          <div v-for="sentence in cardSentences" :key="sentence.c" class="example-block">
-            <p>{{ sentence.c }}</p>
+          <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
+            <p v-html="sentence.highlightedEnglish"></p>
             <span>{{ sentence.cn }}</span>
+            <div v-if="sentence.phrase" class="example-phrase">
+              <span>搭配</span>
+              <strong>{{ sentence.phrase }}</strong>
+            </div>
           </div>
           <el-alert v-if="feedbackTip" class="feedback-hint" :title="feedbackTip" type="info" show-icon :closable="false" />
         </template>
@@ -271,11 +356,11 @@ onMounted(loadTask)
 
       <el-card class="panel-card progress-side" shadow="never">
         <template #header>学习组</template>
-        <el-progress :percentage="task?.items?.length ? Math.round(((task.doneCount || 0) / task.items.length) * 100) : 0" />
+        <el-progress :percentage="studyCompletionRate" />
         <div class="task-lines vertical">
-          <span>待完成 {{ pendingItems.length }}</span>
-          <span>已完成 {{ task?.doneCount || 0 }}</span>
-          <span>总计 {{ task?.items?.length || 0 }}</span>
+          <span>待完成 {{ remainingItemCount }}</span>
+          <span>已完成 {{ completedItemCount }}</span>
+          <span>总计 {{ totalItemCount }}</span>
         </div>
       </el-card>
     </div>

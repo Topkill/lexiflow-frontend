@@ -604,6 +604,39 @@ a {
   color: var(--muted);
 }
 
+.word-highlight,
+.phrase-highlight {
+  padding: 0 4px;
+  border-radius: 5px;
+  background: #fff1b8;
+  color: #6b4e00;
+  font-weight: 760;
+}
+
+.phrase-highlight {
+  background: #dff6ec;
+  color: #0f6848;
+}
+
+.example-phrase {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: #eef8f3;
+}
+
+.example-phrase span {
+  font-size: 12px;
+  color: #34765d;
+}
+
+.example-phrase strong {
+  color: #114f39;
+}
+
 .feedback-hint {
   max-width: 720px;
   margin: 0 auto 22px;
