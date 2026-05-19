@@ -107,7 +107,7 @@ onMounted(loadData)
           <el-table-column prop="totalTokens" label="Token" width="100" />
           <el-table-column prop="latencyMs" label="耗时 ms" width="110" />
           <el-table-column prop="createdAt" label="时间" width="180" />
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="100">
             <template #default="{ row }">
               <el-button text type="primary" :icon="View" @click="openDetail(row)">详情</el-button>
             </template>

@@ -119,7 +119,7 @@ onMounted(loadData)
           </el-table-column>
           <el-table-column prop="lastLoginAt" label="最近登录" width="180" />
           <el-table-column prop="createdAt" label="注册时间" width="180" />
-          <el-table-column label="操作" width="180" fixed="right">
+          <el-table-column label="操作" width="180">
             <template #default="{ row }">
               <el-button text type="primary" :icon="View" @click="openDetail(row)">详情</el-button>
               <el-button

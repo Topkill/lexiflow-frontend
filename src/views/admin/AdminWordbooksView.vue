@@ -183,7 +183,7 @@ onMounted(loadData)
             <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="sortOrder" label="排序" width="90" />
-          <el-table-column label="操作" width="250" fixed="right">
+          <el-table-column label="操作" width="250">
             <template #default="{ row }">
               <el-button text :icon="Tickets" @click="router.push(`/admin/words?wordbookId=${row.id}`)">单词</el-button>
               <el-button text type="primary" :icon="Edit" @click="openEdit(row)">编辑</el-button>

@@ -288,7 +288,7 @@ onMounted(loadWordbooks)
               <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
+          <el-table-column label="操作" width="170">
             <template #default="{ row }">
               <el-button text :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
               <el-button text type="danger" :icon="Delete" :loading="removingId === row.id" @click="removeWord(row)">移除</el-button>
