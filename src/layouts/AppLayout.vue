@@ -23,7 +23,7 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const menuItems = [
-  { path: '/app', label: '今日任务', icon: House },
+  { path: '/app', label: '今日学习', icon: House },
   { path: '/app/wordbooks', label: '词库', icon: Collection },
   { path: '/app/plans', label: '计划', icon: Calendar },
   { path: '/app/study', label: '学习', icon: Reading },

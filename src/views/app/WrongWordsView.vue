@@ -64,10 +64,10 @@ async function startPractice() {
   try {
     const task = await createWrongWordPractice({ limit: 10 })
     if ((task.extraCount || 0) > 0) {
-      ElMessage.success('已加入今日专项复习')
+      ElMessage.success('已加入当前学习组专项复习')
       router.push('/app/study')
     } else {
-      ElMessage.info('暂无可加入的错词，可能已在今日任务中')
+      ElMessage.info('暂无可加入的错词，可能已在当前学习组中')
     }
   } finally {
     practicing.value = false

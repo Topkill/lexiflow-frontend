@@ -58,7 +58,7 @@ onMounted(() => {
 
 <template>
   <section>
-    <PageHeader title="复习" subtitle="到期单词会自动进入今日任务">
+    <PageHeader title="复习" subtitle="到期单词会自动进入学习组">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
     </PageHeader>
 

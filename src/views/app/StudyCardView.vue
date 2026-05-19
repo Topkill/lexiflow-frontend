@@ -40,7 +40,7 @@ const missedItems = ref([])
 const failedFeedbackItemIds = ref(new Set())
 const card = ref(null)
 const emptyTitle = ref('暂无待学习卡片')
-const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
+const emptyDescription = ref('本组完成后可以继续下一组，也可以回到首页查看统计。')
 const needsPlan = ref(false)
 const aiDialogVisible = ref(false)
 const aiLoading = ref(false)
@@ -71,7 +71,7 @@ const learnActionLabel = computed(() => {
   return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
 })
 const flowHint = computed(() => {
-  if (generatingCloze.value) return '单词学习已完成，正在生成必做完形填空。'
+  if (generatingCloze.value) return '本组单词学习已完成，正在生成必做完形填空。'
   if (flowMode.value === FLOW_RETRY) return '这些是刚才没记住的词，先看完整信息，再重新回忆。'
   return learningMode.value ? '先快速理解本段单词，随后会折叠中文释义做轻量回忆。' : '现在只看英文信息，确认自己能不能想起中文意思。'
 })
@@ -290,7 +290,14 @@ async function loadTask() {
     task.value = await fetchTodayTask()
     needsPlan.value = false
     emptyTitle.value = '暂无待学习卡片'
-    emptyDescription.value = '今日任务完成后可以回到首页查看统计。'
+    emptyDescription.value = '本组完成后可以继续下一组，也可以回到首页查看统计。'
+    if (task.value?.status === 'DONE' && !task.value?.clozeAttempted) {
+      card.value = null
+      clearFlowState()
+      const query = task.value.clozeQuizId ? { quizId: task.value.clozeQuizId } : {}
+      router.push({ path: '/app/cloze', query })
+      return
+    }
     if (!restoreLocalFlow()) {
       resetLocalFlow()
     }
@@ -301,7 +308,7 @@ async function loadTask() {
     needsPlan.value = error.code === 30001
     emptyTitle.value = needsPlan.value ? '先创建学习计划' : '暂时无法加载学习卡片'
     emptyDescription.value = needsPlan.value
-      ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。'
+      ? '选择词库并设置每组新词和复习词后，就可以开始学习。'
       : error.message
   } finally {
     loading.value = false
@@ -555,11 +562,19 @@ onMounted(loadTask)
 
 <template>
   <section>
-    <PageHeader title="单词学习" subtitle="分段学习、轻量回忆，再进入必做完形填空">
+    <PageHeader title="单词学习" :subtitle="`第 ${task?.groupNo || 1} 组：分段学习、轻量回忆，再进入必做完形填空`">
       <el-button :icon="Refresh" @click="loadTask">刷新</el-button>
     </PageHeader>
 
     <el-skeleton v-if="loading" :rows="6" animated />
+    <el-card v-else-if="!card && generatingCloze" class="panel-card narrow" shadow="never">
+      <StarterPanel
+        title="本组学习已完成"
+        description="正在生成必做完形填空，稍等片刻就会进入练习。"
+        :icon="Refresh"
+      />
+    </el-card>
+
     <el-card v-else-if="!card" class="panel-card narrow" shadow="never">
       <StarterPanel
         :title="emptyTitle"
@@ -648,7 +663,7 @@ onMounted(loadTask)
       </el-card>
 
       <el-card class="panel-card progress-side" shadow="never">
-        <template #header>学习组</template>
+        <template #header>第 {{ task?.groupNo || 1 }} 组</template>
         <el-progress :percentage="studyCompletionRate" />
         <div class="task-lines vertical">
           <span>{{ flowTitle }} · {{ phaseTitle }}</span>

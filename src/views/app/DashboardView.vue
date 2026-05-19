@@ -15,12 +15,20 @@ const error = ref('')
 const needsPlan = ref(false)
 const primaryActionPath = computed(() => {
   if (!task.value) return '/app/plans'
-  return task.value.status === 'DONE' ? '/app/cloze' : '/app/study'
+  return task.value.status === 'DONE' && !task.value.clozeAttempted ? '/app/cloze' : '/app/study'
 })
 const primaryActionLabel = computed(() => {
   if (!task.value) return '创建计划'
-  return task.value.status === 'DONE' ? '生成练习' : '开始学习'
+  return task.value.status === 'DONE' && !task.value.clozeAttempted ? '完成本组练习' : '开始学习'
 })
+
+function taskActionPath() {
+  return task.value?.status === 'DONE' && !task.value?.clozeAttempted ? '/app/cloze' : '/app/study'
+}
+
+function taskActionLabel() {
+  return task.value?.status === 'DONE' && !task.value?.clozeAttempted ? '完成本组练习' : '进入学习'
+}
 
 async function loadData() {
   loading.value = true
@@ -45,7 +53,7 @@ onMounted(loadData)
 
 <template>
   <section>
-    <PageHeader title="今日任务" subtitle="新词、复习和 AI 练习从这里开始">
+    <PageHeader title="今日学习" subtitle="按组推进新词、复习和 AI 练习">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
       <el-button type="primary" :icon="Reading" @click="router.push(primaryActionPath)">
         {{ primaryActionLabel }}
@@ -56,9 +64,9 @@ onMounted(loadData)
 
     <template v-else>
       <div class="metric-grid">
-        <MetricCard label="今日新词" :value="task?.newCount ?? 0" />
-        <MetricCard label="待复习" :value="task?.reviewCount ?? stats?.dueReviewWords ?? 0" tone="warn" />
-        <MetricCard label="已完成" :value="task?.doneCount ?? 0" />
+        <MetricCard label="本组新词" :value="task?.newCount ?? 0" />
+        <MetricCard label="本组复习" :value="task?.reviewCount ?? stats?.dueReviewWords ?? 0" tone="warn" />
+        <MetricCard label="本组完成" :value="task?.doneCount ?? 0" />
         <MetricCard label="连续学习" :value="stats?.streakDays ?? 0" suffix=" 天" tone="success" />
       </div>
 
@@ -66,14 +74,14 @@ onMounted(loadData)
         <el-card class="panel-card" shadow="never">
           <template #header>
             <div class="card-header-row">
-              <span>任务进度</span>
+              <span>第 {{ task?.groupNo || 1 }} 组进度</span>
               <el-tag :type="task?.status === 'DONE' ? 'success' : 'info'">{{ task?.status || '未生成' }}</el-tag>
             </div>
           </template>
           <StarterPanel
             v-if="!task"
-            :title="needsPlan ? '先创建学习计划' : '今日任务加载失败'"
-            :description="needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (error || '请稍后重试，或查看后端日志。')"
+            :title="needsPlan ? '先创建学习计划' : '学习组加载失败'"
+            :description="needsPlan ? '选择词库并设置每组新词和复习词后，就可以开始学习。' : (error || '请稍后重试，或查看后端日志。')"
             :icon="needsPlan ? Calendar : Refresh"
             :error="!needsPlan"
           >
@@ -88,8 +96,8 @@ onMounted(loadData)
               <span>复习 {{ task.reviewCount }}</span>
               <span>额外 {{ task.extraCount }}</span>
             </div>
-            <el-button type="primary" @click="router.push(task.status === 'DONE' ? '/app/cloze' : '/app/study')">
-              {{ task.status === 'DONE' ? '生成完形填空' : '进入学习' }}
+            <el-button type="primary" @click="router.push(taskActionPath())">
+              {{ taskActionLabel() }}
               <el-icon><ArrowRight /></el-icon>
             </el-button>
           </div>

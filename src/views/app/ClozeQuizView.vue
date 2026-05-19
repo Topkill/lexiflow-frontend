@@ -41,12 +41,13 @@ const allAnswered = computed(() => quizReady.value && quiz.value.blanks.every((b
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
 const pendingCount = computed(() => todayTask.value?.items?.filter((item) => item.status === 'PENDING').length || 0)
 const taskDone = computed(() => todayTask.value?.status === 'DONE')
-const completedGroupReady = computed(() => taskDone.value && totalCount.value >= 10)
+const completedGroupReady = computed(() => taskDone.value && totalCount.value > 0)
 const generateDisabled = computed(() => generating.value || (form.sourceType === 'COMPLETED_GROUP' && !completedGroupReady.value))
+const canContinueStudy = computed(() => todayTask.value?.status !== 'DONE' || todayTask.value?.clozeAttempted || Boolean(attempt.value))
 const generateHint = computed(() => {
   if (form.sourceType !== 'COMPLETED_GROUP' || completedGroupReady.value) return ''
-  if (!taskDone.value) return '完成今日学习组后才能生成本组 10 空完形填空。'
-  return '本组已完成单词不足 10 个，暂不能生成 10 空完形填空。'
+  if (!taskDone.value) return '完成当前学习组后才能生成本组完形填空。'
+  return '本组暂无可用于生成完形填空的单词。'
 })
 const wrongAnswerMap = computed(() => {
   const map = new Map()
@@ -63,6 +64,9 @@ async function loadTodayTask() {
   loadError.value = ''
   try {
     todayTask.value = await fetchTodayTask()
+    if (!route.query.quizId && todayTask.value?.clozeQuizId && !todayTask.value?.clozeAttempted) {
+      await loadQuizById(todayTask.value.clozeQuizId)
+    }
     if (todayTask.value?.status !== 'DONE' && form.sourceType === 'COMPLETED_GROUP') {
       form.sourceType = 'MIXED'
     }
@@ -92,7 +96,7 @@ function applyRouteGenerateError() {
 
 async function generateQuiz() {
   if (!todayTask.value?.taskId) {
-    ElMessage.warning('请先生成今日任务')
+    ElMessage.warning('请先生成学习组')
     return
   }
   if (generateHint.value) {
@@ -139,6 +143,9 @@ async function submitAnswers() {
       durationSeconds,
       answers: quiz.value.blanks.map((blank) => ({ blankId: blank.blankId, answer: answers[blank.blankId] })),
     })
+    if (todayTask.value) {
+      todayTask.value.clozeAttempted = true
+    }
     ElMessage.success('答案已提交')
   } finally {
     submitting.value = false
@@ -180,8 +187,8 @@ onMounted(async () => {
     <template v-else>
       <el-card v-if="!todayTask" class="panel-card narrow" shadow="never">
         <StarterPanel
-          :title="needsPlan ? '先创建学习计划' : '暂时无法加载今日任务'"
-          :description="needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (loadError || '请稍后重试，或检查后端服务。')"
+          :title="needsPlan ? '先创建学习计划' : '暂时无法加载学习组'"
+          :description="needsPlan ? '选择词库并设置每组新词和复习词后，就可以开始学习。' : (loadError || '请稍后重试，或检查后端服务。')"
           :icon="needsPlan ? Calendar : Refresh"
           :error="!needsPlan"
         >
@@ -197,7 +204,7 @@ onMounted(async () => {
             <template #header>
               <div class="card-header-row">
                 <span>生成练习</span>
-                <el-tag>{{ todayTask.plan?.wordbookName || '今日任务' }}</el-tag>
+                <el-tag>{{ todayTask.plan?.wordbookName || '学习组' }}</el-tag>
               </div>
             </template>
             <el-form class="cloze-form" label-position="top">
@@ -270,6 +277,7 @@ onMounted(async () => {
               <el-button :disabled="Boolean(attempt) || !allAnswered" type="primary" :loading="submitting" @click="submitAnswers">
                 提交答案
               </el-button>
+              <el-button v-if="attempt" type="primary" @click="router.push('/app/study')">继续下一组</el-button>
               <el-button v-if="attempt" @click="generateQuiz">再练一组</el-button>
             </div>
           </el-card>
@@ -277,7 +285,7 @@ onMounted(async () => {
           <el-card v-else class="panel-card mt-16" shadow="never">
             <EmptyState title="还没有练习" :description="generateError || '完成一组单词后，系统会优先用不认识和模糊的词生成 10 空完形填空。'">
               <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
-              <el-button @click="router.push('/app/study')">
+              <el-button :disabled="!canContinueStudy" @click="router.push('/app/study')">
                 去背单词
                 <el-icon><ArrowRight /></el-icon>
               </el-button>
@@ -286,7 +294,7 @@ onMounted(async () => {
         </div>
 
         <el-card class="panel-card cloze-side" shadow="never">
-          <template #header>今日任务</template>
+          <template #header>第 {{ todayTask?.groupNo || 1 }} 组</template>
           <div class="task-summary compact">
             <el-progress :percentage="todayTask.progress?.completionRate ?? todayTask.completionRate ?? 0" />
             <div class="task-lines vertical">

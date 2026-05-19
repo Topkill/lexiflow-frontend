@@ -24,6 +24,10 @@ export function createStudyPlan(payload) {
   return http.post('/api/v1/study/plans', payload)
 }
 
+export function updateStudyPlan(planId, payload) {
+  return http.put(`/api/v1/study/plans/${planId}`, payload)
+}
+
 export function pauseStudyPlan(planId) {
   return http.post(`/api/v1/study/plans/${planId}/pause`)
 }

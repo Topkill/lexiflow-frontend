@@ -27,7 +27,7 @@ async function loadTodayTask() {
     todayTask.value = await fetchTodayTask()
   } catch (error) {
     todayTask.value = null
-    taskError.value = error.code === 30001 ? '先创建学习计划并完成今日任务后，再生成学习报告。' : error.message
+    taskError.value = error.code === 30001 ? '先创建学习计划并完成学习组后，再生成学习报告。' : error.message
   } finally {
     loadingTask.value = false
   }
@@ -62,7 +62,7 @@ async function selectReport(report) {
 
 async function createReport() {
   if (!todayTask.value?.taskId) {
-    ElMessage.warning(taskError.value || '请先生成今日任务')
+    ElMessage.warning(taskError.value || '请先生成学习组')
     return
   }
   creating.value = true
