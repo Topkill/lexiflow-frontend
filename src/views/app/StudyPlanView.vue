@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Calendar, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
@@ -73,6 +73,22 @@ async function loadPlan() {
 
 async function submit() {
   await formRef.value.validate()
+  const dailyNewWords = Number(form.dailyNewWords)
+  if (dailyNewWords > 50) {
+    try {
+      await ElMessageBox.confirm(
+        `本计划每日将生成 ${dailyNewWords} 个新词，是否继续？`,
+        '确认每日新词数量',
+        {
+          confirmButtonText: '继续创建',
+          cancelButtonText: '再调整',
+          type: 'warning',
+        },
+      )
+    } catch {
+      return
+    }
+  }
   saving.value = true
   try {
     plan.value = await createStudyPlan({ ...form, wordbookId: String(form.wordbookId).trim() })

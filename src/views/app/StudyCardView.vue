@@ -10,18 +10,27 @@ import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 
+const FLOW_SEGMENT = 'segment'
+const FLOW_RETRY = 'retry'
+const PHASE_LEARN = 'learn'
+const PHASE_CONFIRM = 'confirm'
+
 const router = useRouter()
 const loading = ref(false)
 const submitting = ref(false)
 const generatingCloze = ref(false)
 const favoriteOperating = ref(false)
 const task = ref(null)
-const currentIndex = ref(0)
+const itemBatches = ref([])
+const segmentIndex = ref(0)
+const activeIndex = ref(0)
+const flowMode = ref(FLOW_SEGMENT)
+const phase = ref(PHASE_LEARN)
+const retryItems = ref([])
+const nextRetryItems = ref([])
+const missedItems = ref([])
+const failedFeedbackItemIds = ref(new Set())
 const card = ref(null)
-const answerVisible = ref(false)
-const lastFeedback = ref('')
-const reinforceHint = ref('')
-const reinforceCount = ref(0)
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('今日任务完成后可以回到首页查看统计。')
 const needsPlan = ref(false)
@@ -32,7 +41,10 @@ const aiResult = ref(null)
 const aiQuestion = ref('')
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
-const currentItem = computed(() => pendingItems.value[currentIndex.value])
+const currentSegmentItems = computed(() => itemBatches.value[segmentIndex.value] || [])
+const activeItems = computed(() => (flowMode.value === FLOW_RETRY ? retryItems.value : currentSegmentItems.value))
+const currentItem = computed(() => activeItems.value[activeIndex.value])
+const segmentCount = computed(() => itemBatches.value.length)
 const totalItemCount = computed(() => task.value?.progress?.totalCount ?? task.value?.items?.length ?? 0)
 const completedItemCount = computed(() => task.value?.progress?.doneCount ?? task.value?.doneCount ?? 0)
 const remainingItemCount = computed(() => Math.max(0, totalItemCount.value - completedItemCount.value))
@@ -41,10 +53,20 @@ const studyCompletionRate = computed(() => (
     ? Math.min(100, Math.round((completedItemCount.value / totalItemCount.value) * 100))
     : 0
 ))
-const feedbackTip = computed(() => reinforceHint.value || ({ UNKNOWN: '先看释义和例句，再尝试回忆一次；确认记住后点认识。', VAGUE: '再巩固一下这张卡片，能稳定想起后点认识。' })[lastFeedback.value] || '')
-const feedbackLabels = computed(() => (answerVisible.value
-  ? { unknown: '仍不认识', vague: '还是模糊', known: '认识了' }
-  : { unknown: '不认识', vague: '模糊', known: '认识' }))
+const recallMode = computed(() => phase.value === PHASE_CONFIRM)
+const learningMode = computed(() => phase.value === PHASE_LEARN)
+const flowTitle = computed(() => (flowMode.value === FLOW_RETRY ? '回看没记住的词' : `第 ${segmentIndex.value + 1}/${segmentCount.value || 1} 段`))
+const phaseTitle = computed(() => (learningMode.value ? '完整学习' : '轻量回忆'))
+const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, activeItems.value.length || 1)}/${activeItems.value.length || 0}`)
+const learnActionLabel = computed(() => {
+  if (flowMode.value === FLOW_RETRY) return '我再回忆一次'
+  return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
+})
+const flowHint = computed(() => {
+  if (generatingCloze.value) return '单词学习已完成，正在生成必做完形填空。'
+  if (flowMode.value === FLOW_RETRY) return '这些是刚才没记住的词，先看完整信息，再重新回忆。'
+  return learningMode.value ? '先快速理解本段单词，随后会折叠中文释义做轻量回忆。' : '现在只看英文信息，确认自己能不能想起中文意思。'
+})
 const aiQuestionPlaceholder = computed(() => card.value?.word ? `例如：${card.value.word} 的反义词有哪些？` : '例如：这个词的反义词有哪些？')
 const cardSentences = computed(() => {
   if (!card.value?.sentences) return []
@@ -113,6 +135,25 @@ function highlightExampleText(text = '', word = '', phrase = '') {
   return escaped.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), '<mark class="word-highlight">$&</mark>')
 }
 
+function buildItemBatches(items) {
+  if (!items.length) return []
+  const chunkSize = Math.ceil(items.length / 3)
+  const batches = []
+  for (let index = 0; index < items.length; index += chunkSize) {
+    batches.push(items.slice(index, index + chunkSize))
+  }
+  return batches
+}
+
+function addUniqueItem(targetRef, item) {
+  if (!item || targetRef.value.some((existing) => String(existing.itemId) === String(item.itemId))) return
+  targetRef.value = [...targetRef.value, item]
+}
+
+function markFailedFeedbackSubmitted(itemId) {
+  failedFeedbackItemIds.value = new Set([...failedFeedbackItemIds.value, String(itemId)])
+}
+
 async function loadTask() {
   loading.value = true
   try {
@@ -120,7 +161,7 @@ async function loadTask() {
     needsPlan.value = false
     emptyTitle.value = '暂无待学习卡片'
     emptyDescription.value = '今日任务完成后可以回到首页查看统计。'
-    currentIndex.value = 0
+    resetLocalFlow()
     await loadCard()
   } catch (error) {
     task.value = null
@@ -135,50 +176,132 @@ async function loadTask() {
   }
 }
 
+function resetLocalFlow() {
+  itemBatches.value = buildItemBatches(pendingItems.value)
+  segmentIndex.value = 0
+  activeIndex.value = 0
+  flowMode.value = FLOW_SEGMENT
+  phase.value = PHASE_LEARN
+  retryItems.value = []
+  nextRetryItems.value = []
+  missedItems.value = []
+  failedFeedbackItemIds.value = new Set()
+}
+
 async function loadCard() {
   if (!currentItem.value) {
     card.value = null
     return
   }
   card.value = await fetchTaskItemCard(currentItem.value.itemId)
-  answerVisible.value = false
-  lastFeedback.value = ''
-  reinforceHint.value = ''
-  reinforceCount.value = 0
   aiResult.value = null
   aiQuestion.value = ''
 }
 
-async function feedback(value) {
-  if (!card.value) return
-  if (answerVisible.value && value !== 'KNOWN') {
-    lastFeedback.value = value
-    reinforceCount.value += 1
-    reinforceHint.value = value === 'UNKNOWN'
-      ? `已保留在当前卡片，再读一遍释义和例句；记住后点“认识了”。${reinforceCount.value > 1 ? `已巩固 ${reinforceCount.value} 次。` : ''}`
-      : `已保留在当前卡片，先遮住释义回忆一次；稳定想起后点“认识了”。${reinforceCount.value > 1 ? `已巩固 ${reinforceCount.value} 次。` : ''}`
+async function goNextLearnCard() {
+  if (!card.value || submitting.value || generatingCloze.value) return
+  if (flowMode.value === FLOW_RETRY) {
+    phase.value = PHASE_CONFIRM
     return
   }
-  if (!answerVisible.value && value !== 'KNOWN') {
-    answerVisible.value = true
-    lastFeedback.value = value
-    reinforceHint.value = ''
-    reinforceCount.value = 0
+  if (activeIndex.value < activeItems.value.length - 1) {
+    activeIndex.value += 1
+    await loadCard()
+    return
   }
+  activeIndex.value = 0
+  phase.value = PHASE_CONFIRM
+  await loadCard()
+}
+
+async function forgetCurrentCard() {
+  if (!currentItem.value || submitting.value || generatingCloze.value) return
+  const item = currentItem.value
+  await submitUnknownOnce(item)
+  if (flowMode.value === FLOW_RETRY) {
+    addUniqueItem(nextRetryItems, item)
+  } else {
+    addUniqueItem(missedItems, item)
+  }
+  await advanceAfterConfirm()
+}
+
+async function submitUnknownOnce(item) {
+  const itemId = String(item.itemId)
+  if (failedFeedbackItemIds.value.has(itemId)) return
   submitting.value = true
   try {
-    const response = await submitTaskFeedback(card.value.itemId, { feedback: value, durationSeconds: 0 })
-    if (value === 'KNOWN') {
-      applyFeedbackProgress(response)
-      if (response.dailyTaskDone && task.value?.taskId) {
-        await generateCompletedGroupCloze(task.value.taskId)
-        return
-      }
-      await loadTask()
-    }
+    await submitTaskFeedback(item.itemId, { feedback: 'UNKNOWN', durationSeconds: 0 })
+    markFailedFeedbackSubmitted(itemId)
   } finally {
     submitting.value = false
   }
+}
+
+async function rememberCurrentCard() {
+  if (!card.value || submitting.value || generatingCloze.value) return
+  submitting.value = true
+  try {
+    const response = await submitTaskFeedback(card.value.itemId, { feedback: 'KNOWN', durationSeconds: 0 })
+    applyFeedbackProgress(response)
+    if (response.dailyTaskDone && task.value?.taskId) {
+      await generateCompletedGroupCloze(task.value.taskId)
+      return
+    }
+    await advanceAfterConfirm()
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function advanceAfterConfirm() {
+  if (activeIndex.value < activeItems.value.length - 1) {
+    activeIndex.value += 1
+    if (flowMode.value === FLOW_RETRY) {
+      phase.value = PHASE_LEARN
+    }
+    await loadCard()
+    return
+  }
+
+  if (flowMode.value === FLOW_RETRY) {
+    await finishRetryRound()
+  } else {
+    await finishSegmentRound()
+  }
+}
+
+async function finishSegmentRound() {
+  if (segmentIndex.value < itemBatches.value.length - 1) {
+    segmentIndex.value += 1
+    activeIndex.value = 0
+    phase.value = PHASE_LEARN
+    await loadCard()
+    return
+  }
+  if (missedItems.value.length > 0) {
+    await startRetryRound(missedItems.value)
+    missedItems.value = []
+    return
+  }
+  await loadTask()
+}
+
+async function startRetryRound(items) {
+  flowMode.value = FLOW_RETRY
+  retryItems.value = [...items]
+  nextRetryItems.value = []
+  activeIndex.value = 0
+  phase.value = PHASE_LEARN
+  await loadCard()
+}
+
+async function finishRetryRound() {
+  if (nextRetryItems.value.length > 0) {
+    await startRetryRound(nextRetryItems.value)
+    return
+  }
+  await loadTask()
 }
 
 function applyFeedbackProgress(response) {
@@ -283,7 +406,7 @@ onMounted(loadTask)
 
 <template>
   <section>
-    <PageHeader title="单词学习" subtitle="卡片式完成今日新词和到期复习">
+    <PageHeader title="单词学习" subtitle="分段学习、轻量回忆，再进入必做完形填空">
       <el-button :icon="Refresh" @click="loadTask">刷新</el-button>
     </PageHeader>
 
@@ -318,16 +441,22 @@ onMounted(loadTask)
             @click="toggleFavorite"
           />
         </div>
+
+        <div class="study-flow-meta">
+          <el-tag effect="plain">{{ flowTitle }}</el-tag>
+          <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
+          <span>{{ cardPositionLabel }}</span>
+        </div>
+
         <h1>{{ card.word }}</h1>
         <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
           <span v-if="card.phonetic0">英 {{ card.phonetic0 }}</span>
           <span v-if="card.phonetic1">美 {{ card.phonetic1 }}</span>
         </div>
-        <div v-if="!answerVisible" class="recall-panel">
-          <span>先回忆释义</span>
-          <p>想不起或不确定时，点“不认识”或“模糊”查看答案并继续巩固。</p>
-        </div>
-        <template v-else>
+
+        <p class="study-flow-hint">{{ flowHint }}</p>
+
+        <template v-if="learningMode">
           <div class="definition-block revealed">
             <span>{{ card.primaryPos }}</span>
             <strong>{{ card.primaryDefinition }}</strong>
@@ -340,16 +469,31 @@ onMounted(loadTask)
               <strong>{{ sentence.phrase }}</strong>
             </div>
           </div>
-          <el-alert v-if="feedbackTip" class="feedback-hint" :title="feedbackTip" type="info" show-icon :closable="false" />
         </template>
+
+        <template v-else>
+          <div class="recall-panel">
+            <span>现在回忆中文释义</span>
+            <p>先别看中文，试着根据单词、音标和英文例句说出意思。</p>
+          </div>
+          <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
+            <p v-html="sentence.highlightedEnglish"></p>
+          </div>
+        </template>
+
         <div class="ai-action-row">
           <el-button :icon="ChatLineRound" @click="openAiQuestion">AI 问答</el-button>
         </div>
-        <div class="feedback-row">
-          <el-button size="large" :loading="submitting" :disabled="generatingCloze" @click="feedback('UNKNOWN')">{{ feedbackLabels.unknown }}</el-button>
-          <el-button size="large" :loading="submitting" :disabled="generatingCloze" @click="feedback('VAGUE')">{{ feedbackLabels.vague }}</el-button>
-          <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="feedback('KNOWN')">
-            {{ generatingCloze ? '正在生成完形填空' : feedbackLabels.known }}
+
+        <div v-if="learningMode" class="feedback-row">
+          <el-button size="large" type="primary" :loading="submitting || generatingCloze" :disabled="submitting || generatingCloze" @click="goNextLearnCard">
+            {{ learnActionLabel }}
+          </el-button>
+        </div>
+        <div v-else class="feedback-row">
+          <el-button size="large" :loading="submitting" :disabled="submitting || generatingCloze" @click="forgetCurrentCard">还是没记住</el-button>
+          <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="rememberCurrentCard">
+            {{ generatingCloze ? '正在生成完形填空' : '想起来了' }}
           </el-button>
         </div>
       </el-card>
@@ -358,6 +502,8 @@ onMounted(loadTask)
         <template #header>学习组</template>
         <el-progress :percentage="studyCompletionRate" />
         <div class="task-lines vertical">
+          <span>{{ flowTitle }} · {{ phaseTitle }}</span>
+          <span>本轮 {{ cardPositionLabel }}</span>
           <span>待完成 {{ remainingItemCount }}</span>
           <span>已完成 {{ completedItemCount }}</span>
           <span>总计 {{ totalItemCount }}</span>
