@@ -1,10 +1,9 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Refresh, Reading } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, Collection, Refresh, Reading } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import MetricCard from '../../components/MetricCard.vue'
-import EmptyState from '../../components/EmptyState.vue'
 import { fetchTodayTask, fetchStudyStatistics } from '../../api/study'
 
 const router = useRouter()
@@ -62,7 +61,7 @@ onMounted(loadData)
         <MetricCard label="连续学习" :value="stats?.streakDays ?? 0" suffix=" 天" tone="success" />
       </div>
 
-      <div class="work-grid">
+      <div class="work-grid dashboard-work-grid">
         <el-card class="panel-card" shadow="never">
           <template #header>
             <div class="card-header-row">
@@ -70,15 +69,24 @@ onMounted(loadData)
               <el-tag :type="task?.status === 'DONE' ? 'success' : 'info'">{{ task?.status || '未生成' }}</el-tag>
             </div>
           </template>
-          <EmptyState
+          <div
             v-if="!task"
-            :title="needsPlan ? '先创建学习计划' : '今日任务加载失败'"
-            :description="needsPlan ? '选择一个词库和每日新词数量后，系统会自动生成今日任务。' : (error || '请稍后重试，或查看后端日志。')"
+            class="starter-panel"
+            :class="{ 'is-error': !needsPlan }"
           >
-            <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
-            <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
-            <el-button v-else type="primary" @click="loadData">重试</el-button>
-          </EmptyState>
+            <div class="starter-icon">
+              <el-icon><Calendar v-if="needsPlan" /><Refresh v-else /></el-icon>
+            </div>
+            <div class="starter-copy">
+              <h2>{{ needsPlan ? '先创建学习计划' : '今日任务加载失败' }}</h2>
+              <p>{{ needsPlan ? '选择词库并设置每日新词后，系统会自动生成今天的学习任务。' : (error || '请稍后重试，或查看后端日志。') }}</p>
+            </div>
+            <div class="starter-actions">
+              <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+              <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+              <el-button v-else type="primary" @click="loadData">重试</el-button>
+            </div>
+          </div>
           <div v-else class="task-summary">
             <el-progress :percentage="task.progress?.completionRate ?? task.completionRate ?? 0" />
             <div class="task-lines">
@@ -94,12 +102,24 @@ onMounted(loadData)
         </el-card>
 
         <el-card class="panel-card" shadow="never">
-          <template #header>当前词库</template>
-          <div class="progress-panel">
-            <el-progress type="dashboard" :percentage="Number(stats?.currentWordbookProgress || 0)" />
+          <template #header>
+            <div class="card-header-row">
+              <span>当前词库</span>
+              <el-tag :type="stats?.learnedWords ? 'success' : 'info'">{{ stats?.learnedWords ? '学习中' : '未开始' }}</el-tag>
+            </div>
+          </template>
+          <div class="progress-panel dashboard-progress-panel" :class="{ 'is-empty': !stats?.learnedWords }">
+            <div class="progress-icon" v-if="!stats?.learnedWords">
+              <el-icon><Collection /></el-icon>
+            </div>
+            <el-progress v-else type="dashboard" :percentage="Number(stats?.currentWordbookProgress || 0)" />
             <div>
               <p class="large-number">{{ stats?.learnedWords ?? 0 }}</p>
               <p class="muted">累计学习词数</p>
+              <div class="wordbook-mini-stats">
+                <span>待复习 {{ stats?.dueReviewWords ?? 0 }}</span>
+                <span>已掌握 {{ stats?.masteredWords ?? 0 }}</span>
+              </div>
             </div>
           </div>
         </el-card>

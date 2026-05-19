@@ -89,7 +89,7 @@ onMounted(() => {
           <el-table-column prop="primaryDefinition" label="释义" min-width="220" />
           <el-table-column prop="note" label="备注" min-width="160" />
           <el-table-column prop="createdAt" label="收藏时间" width="180" />
-          <el-table-column label="操作" width="120" fixed="right">
+          <el-table-column label="操作" width="120">
             <template #default="{ row }">
               <el-button text type="danger" :icon="Delete" :loading="deletingId === row.favoriteWordId" @click="removeFavorite(row)">取消</el-button>
             </template>

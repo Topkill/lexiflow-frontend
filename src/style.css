@@ -333,6 +333,18 @@ a {
   max-width: 680px;
 }
 
+.panel-card .el-empty {
+  padding: 32px 0;
+}
+
+.panel-card .el-empty__image {
+  width: 112px;
+}
+
+.panel-card .el-empty__description {
+  margin-top: 10px;
+}
+
 .card-header-row,
 .wordbook-topline,
 .plan-title-row,
@@ -343,6 +355,11 @@ a {
   gap: 12px;
 }
 
+.card-header-row {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .task-summary,
 .plan-card-body,
 .progress-panel,
@@ -350,6 +367,61 @@ a {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.dashboard-work-grid .panel-card {
+  min-height: 244px;
+}
+
+.starter-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  min-height: 172px;
+  padding: 6px 4px;
+}
+
+.starter-icon,
+.progress-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: var(--primary);
+}
+
+.starter-icon {
+  width: 52px;
+  height: 52px;
+  font-size: 24px;
+}
+
+.starter-panel.is-error .starter-icon {
+  background: #fff7ed;
+  color: var(--warn);
+}
+
+.starter-copy h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 760;
+}
+
+.starter-copy p {
+  max-width: 560px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.starter-actions {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .task-lines {
@@ -378,6 +450,37 @@ a {
 .progress-panel {
   align-items: center;
   text-align: center;
+}
+
+.dashboard-progress-panel {
+  justify-content: center;
+  min-height: 172px;
+}
+
+.dashboard-progress-panel.is-empty {
+  gap: 12px;
+}
+
+.progress-icon {
+  width: 64px;
+  height: 64px;
+  font-size: 28px;
+}
+
+.wordbook-mini-stats {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.wordbook-mini-stats span {
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--panel-soft);
 }
 
 .large-number {
@@ -860,12 +963,12 @@ a {
     padding: 10px 16px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
-    scrollbar-width: thin;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
 
   .mobile-nav::-webkit-scrollbar {
-    height: 4px;
+    display: none;
   }
 
   .mobile-nav a {
@@ -915,10 +1018,36 @@ a {
     padding: 24px;
   }
 
-  .page-header,
-  .topbar {
+  .content-wrap {
+    padding: 14px 12px 64px;
+  }
+
+  .page-header {
     align-items: stretch;
     flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
+
+  .page-header p {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .topbar {
+    min-height: 60px;
+    align-items: center;
+    flex-direction: row;
+    gap: 12px;
+    padding: 10px 12px;
+  }
+
+  .topbar > div:first-child {
+    min-width: 0;
   }
 
   .topbar-actions,
@@ -926,24 +1055,193 @@ a {
     width: 100%;
   }
 
-  .topbar-actions .el-button,
+  .topbar-actions {
+    width: auto;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: auto;
+  }
+
   .page-header-actions .el-button {
     flex: 1 1 auto;
   }
 
-  .metric-grid,
-  .metric-grid.wide,
+  .topbar-actions .el-button {
+    flex: 0 1 auto;
+  }
+
+  .page-header-actions .el-button,
+  .button-row .el-button,
+  .feedback-row .el-button,
+  .ai-action-row .el-button,
+  .starter-actions .el-button,
+  .candidate-buttons .el-button {
+    margin-left: 0 !important;
+  }
+
+  .user-button {
+    max-width: 168px;
+  }
+
+  .panel-card,
+  .wordbook-card,
+  .study-word-card {
+    border-radius: 8px !important;
+  }
+
+  .panel-card .el-card__header,
+  .wordbook-card .el-card__header,
+  .study-word-card .el-card__header {
+    padding: 14px 16px;
+  }
+
+  .panel-card .el-card__body,
+  .wordbook-card .el-card__body,
+  .study-word-card .el-card__body {
+    padding: 16px;
+  }
+
+  .panel-card .el-empty,
+  .content-wrap > section > .el-empty {
+    padding: 18px 0;
+  }
+
+  .panel-card .el-empty__image,
+  .content-wrap > section > .el-empty .el-empty__image {
+    width: 84px;
+  }
+
+  .empty-description {
+    max-width: 100%;
+    line-height: 1.6;
+  }
+
+  .work-grid,
+  .study-card-layout,
+  .cloze-layout,
+  .report-layout,
+  .wordbook-grid {
+    gap: 12px;
+  }
+
   .wordbook-grid {
     grid-template-columns: 1fr;
   }
 
+  .metric-grid,
+  .metric-grid.wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .metric-card {
+    min-height: 88px;
+    padding: 14px;
+  }
+
+  .metric-value {
+    margin-top: 10px;
+    font-size: 28px;
+  }
+
+  .admin-filter-row,
+  .report-filter-row {
+    gap: 8px;
+  }
+
+  .filter-grow,
+  .admin-filter-row .el-input,
+  .admin-filter-row .el-select,
+  .admin-filter-row .el-button,
+  .report-filter-row .el-date-editor,
+  .report-filter-row .button-row,
+  .report-filter-row .button-row .el-button {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .el-table {
+    font-size: 13px;
+  }
+
+  .pagination-row {
+    justify-content: center;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .dashboard-work-grid .panel-card {
+    min-height: 0;
+  }
+
+  .starter-panel {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .starter-actions {
+    grid-column: auto;
+    width: 100%;
+  }
+
+  .starter-actions .el-button {
+    flex: 1 1 130px;
+  }
+
+  .dashboard-progress-panel {
+    min-height: 0;
+  }
+
   .study-word-card h1 {
     font-size: 42px;
+    margin-top: 24px;
+  }
+
+  .study-word-card {
+    min-height: 0;
+  }
+
+  .phonetic {
+    margin-bottom: 20px;
+    font-size: 15px;
+  }
+
+  .definition-block,
+  .example-block,
+  .recall-panel {
+    padding: 14px;
   }
 
   .feedback-row .el-button {
     min-width: 0;
     flex: 1 1 100%;
+  }
+
+  .progress-side,
+  .cloze-side {
+    order: -1;
+  }
+
+  .report-detail {
+    min-height: 0;
+  }
+
+  .report-markdown {
+    padding: 14px;
+  }
+
+  .cloze-passage,
+  .cloze-blank-item {
+    padding: 14px;
+  }
+
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
   }
 
   .plan-meta-grid,
@@ -963,5 +1261,12 @@ a {
   .cloze-submit-row .el-button {
     width: 100%;
     margin-left: 0 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .metric-grid,
+  .metric-grid.wide {
+    grid-template-columns: 1fr;
   }
 }
