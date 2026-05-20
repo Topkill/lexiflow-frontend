@@ -101,6 +101,10 @@ async function loadTodayTask() {
     todayTask.value = await fetchTodayTask()
     if (!route.query.quizId && todayTask.value?.clozeQuizId && !todayTask.value?.clozeAttempted) {
       await loadQuizById(todayTask.value.clozeQuizId)
+      if (route.query.generateError) {
+        generateError.value = ''
+        router.replace({ path: '/app/cloze', query: { quizId: todayTask.value.clozeQuizId } })
+      }
     }
     if (todayTask.value?.status !== 'DONE' && form.sourceType === 'COMPLETED_GROUP') {
       form.sourceType = 'MIXED'

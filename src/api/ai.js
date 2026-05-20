@@ -5,7 +5,7 @@ export function askWordQuestion(wordId, payload, config = {}) {
 }
 
 export function createClozeTask(payload, config = {}) {
-  return http.post('/api/v1/ai/cloze-tasks', payload, config)
+  return http.post('/api/v1/ai/cloze-tasks', payload, { timeout: 120000, ...config })
 }
 
 export function fetchClozeQuiz(quizId) {
