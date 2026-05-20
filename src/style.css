@@ -779,9 +779,11 @@ a {
 }
 
 .cloze-candidates,
-.candidate-buttons,
 .cloze-submit-row,
-.answer-result {
+.answer-result,
+.cloze-answer-strip,
+.cloze-active-line,
+.cloze-result-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -789,7 +791,7 @@ a {
 }
 
 .cloze-candidates {
-  margin-top: 16px;
+  margin-bottom: 14px;
 }
 
 .cloze-option {
@@ -803,6 +805,27 @@ a {
   background: var(--panel);
   color: var(--text);
   font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.cloze-option:hover:not(:disabled),
+.cloze-option.selected {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: #eff6ff;
+}
+
+.cloze-option.used:not(.selected) {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.cloze-option:disabled {
+  cursor: default;
 }
 
 .cloze-option span {
@@ -818,18 +841,137 @@ a {
   font-weight: 700;
 }
 
-.cloze-blank-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 18px;
+.cloze-inline-blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  min-height: 34px;
+  margin: 0 4px;
+  padding: 2px 10px;
+  border: 1px solid rgba(37, 99, 235, 0.36);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 750;
+  line-height: 1.2;
+  vertical-align: baseline;
+  cursor: pointer;
 }
 
-.cloze-blank-item {
-  padding: 16px;
+.cloze-inline-blank.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.cloze-inline-blank.answered {
+  background: #eff6ff;
+}
+
+.cloze-inline-blank.correct {
+  border-color: rgba(5, 150, 105, 0.5);
+  background: #ecfdf5;
+  color: var(--success);
+}
+
+.cloze-inline-blank.wrong {
+  border-color: rgba(220, 38, 38, 0.5);
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+.cloze-inline-blank:disabled {
+  cursor: default;
+}
+
+.cloze-answer-panel {
+  margin-top: 16px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.cloze-answer-strip {
+  margin-top: 12px;
+}
+
+.cloze-answer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cloze-answer-pill span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.cloze-answer-pill.active {
+  border-color: var(--primary);
+  background: #eff6ff;
+  color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.cloze-answer-pill.answered {
+  color: var(--text);
+}
+
+.cloze-answer-pill.correct {
+  border-color: rgba(5, 150, 105, 0.42);
+  background: #ecfdf5;
+  color: var(--success);
+}
+
+.cloze-answer-pill.wrong {
+  border-color: rgba(220, 38, 38, 0.42);
+  background: #fef2f2;
+  color: var(--danger);
+}
+
+.cloze-answer-pill:disabled {
+  cursor: default;
+}
+
+.cloze-active-line {
+  justify-content: space-between;
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.cloze-active-line .el-button {
+  margin-left: 0 !important;
+}
+
+.cloze-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cloze-result-row {
+  align-items: flex-start;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .blank-title-row {
@@ -837,14 +979,6 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.candidate-buttons {
-  margin-top: 12px;
-}
-
-.candidate-buttons .el-button {
-  margin-left: 0 !important;
 }
 
 .answer-result {
@@ -1155,8 +1289,7 @@ a {
   .button-row .el-button,
   .feedback-row .el-button,
   .ai-action-row .el-button,
-  .starter-actions .el-button,
-  .candidate-buttons .el-button {
+  .starter-actions .el-button {
     margin-left: 0 !important;
   }
 
@@ -1316,7 +1449,7 @@ a {
   }
 
   .cloze-passage,
-  .cloze-blank-item {
+  .cloze-answer-panel {
     padding: 14px;
   }
 

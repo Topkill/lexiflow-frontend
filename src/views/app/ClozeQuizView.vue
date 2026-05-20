@@ -42,6 +42,37 @@ const candidateOptions = computed(() => candidateWords.value.map((word, index) =
 })))
 const quizReady = computed(() => Boolean(quiz.value?.blanks?.length))
 const allAnswered = computed(() => quizReady.value && quiz.value.blanks.every((blank) => answers[blank.blankId]))
+const selectedBlankId = ref(null)
+const activeBlank = computed(() => {
+  const blanks = quiz.value?.blanks || []
+  return blanks.find((blank) => String(blank.blankId) === String(selectedBlankId.value)) || null
+})
+const answeredCount = computed(() => {
+  const blanks = quiz.value?.blanks || []
+  return blanks.filter((blank) => answers[blank.blankId]).length
+})
+const clozePassageParts = computed(() => {
+  if (!quiz.value?.passage) return []
+  const blanksByNo = new Map((quiz.value.blanks || []).map((blank) => [String(blank.blankNo), blank]))
+  const parts = []
+  const pattern = /_{2,}\s*(\d+)\s*_{2,}/g
+  let cursor = 0
+  let match
+  while ((match = pattern.exec(quiz.value.passage)) !== null) {
+    if (match.index > cursor) {
+      parts.push({ type: 'text', text: quiz.value.passage.slice(cursor, match.index) })
+    }
+    const blank = blanksByNo.get(match[1])
+    parts.push(blank
+      ? { type: 'blank', blank }
+      : { type: 'text', text: match[0] })
+    cursor = pattern.lastIndex
+  }
+  if (cursor < quiz.value.passage.length) {
+    parts.push({ type: 'text', text: quiz.value.passage.slice(cursor) })
+  }
+  return parts
+})
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
 const pendingCount = computed(() => todayTask.value?.items?.filter((item) => item.status === 'PENDING').length || 0)
 const taskDone = computed(() => todayTask.value?.status === 'DONE')
@@ -87,6 +118,7 @@ async function loadTodayTask() {
 function resetQuizState() {
   quiz.value = null
   attempt.value = null
+  selectedBlankId.value = null
   Object.keys(answers).forEach((key) => delete answers[key])
 }
 
@@ -135,6 +167,7 @@ async function generateQuiz() {
 async function loadQuizById(quizId) {
   resetQuizState()
   quiz.value = await fetchClozeQuiz(quizId)
+  selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
   startedAt.value = Date.now()
 }
 
@@ -159,22 +192,57 @@ async function submitAnswers() {
 function selectAnswer(blank, word) {
   if (attempt.value) return
   answers[blank.blankId] = word
+  selectedBlankId.value = blank.blankId
+  advanceActiveBlank(blank.blankId)
+}
+
+function selectActiveAnswer(option) {
+  if (attempt.value || !option?.word) return
+  const blank = activeBlank.value || firstUnansweredBlank()
+  if (!blank) return
+  selectAnswer(blank, option.word)
 }
 
 function clearAnswer(blank) {
   if (attempt.value) return
   delete answers[blank.blankId]
+  selectedBlankId.value = blank.blankId
 }
 
-function answerTagType(answer) {
-  if (!answer) return 'info'
-  return answer.correct ? 'success' : 'danger'
+function firstUnansweredBlank() {
+  const blanks = quiz.value?.blanks || []
+  return blanks.find((blank) => !answers[blank.blankId]) || blanks[0] || null
+}
+
+function setActiveBlank(blank) {
+  if (attempt.value || !blank?.blankId) return
+  selectedBlankId.value = blank.blankId
+}
+
+function advanceActiveBlank(currentBlankId) {
+  const blanks = quiz.value?.blanks || []
+  if (!blanks.length) return
+  const currentIndex = blanks.findIndex((blank) => String(blank.blankId) === String(currentBlankId))
+  const ordered = currentIndex >= 0
+    ? [...blanks.slice(currentIndex + 1), ...blanks.slice(0, currentIndex + 1)]
+    : blanks
+  const next = ordered.find((blank) => !answers[blank.blankId])
+  selectedBlankId.value = next?.blankId || currentBlankId
+}
+
+function isOptionUsed(word) {
+  return Object.values(answers).includes(word)
 }
 
 function selectedOptionLabel(blankId) {
   const selectedWord = answers[blankId]
   const option = candidateOptions.value.find((candidate) => candidate.word === selectedWord)
   return option?.label || '未选择'
+}
+
+function inlineBlankLabel(blank) {
+  const label = selectedOptionLabel(blank.blankId)
+  return label === '未选择' ? `__${blank.blankNo}__` : label
 }
 
 function answerOptionLabel(word) {
@@ -247,53 +315,86 @@ onMounted(async () => {
               </div>
             </template>
 
-            <div class="cloze-passage">{{ quiz.passage }}</div>
-
             <div class="cloze-candidates">
               <button
                 v-for="option in candidateOptions"
                 :key="option.label"
                 class="cloze-option"
                 type="button"
-                disabled
+                :class="{
+                  selected: activeBlank && answers[activeBlank.blankId] === option.word,
+                  used: isOptionUsed(option.word),
+                }"
+                :disabled="Boolean(attempt)"
+                @click="selectActiveAnswer(option)"
               >
                 <span>{{ option.label }}</span>
                 {{ option.word }}
               </button>
             </div>
 
-            <div class="cloze-blank-list">
-              <div v-for="blank in quiz.blanks" :key="blank.blankId" class="cloze-blank-item">
-                <div class="blank-title-row">
-                  <strong>空格 {{ blank.blankNo }}</strong>
-                  <el-tag :type="answerTagType(blankAnswer(blank.blankId))">
-                    {{ blankAnswer(blank.blankId)?.correct === true ? '正确' : blankAnswer(blank.blankId)?.correct === false ? '错误' : '待作答' }}
-                  </el-tag>
-                </div>
-                <p class="muted">当前选择：{{ selectedOptionLabel(blank.blankId) }}</p>
-                <div class="candidate-buttons">
-                  <el-button
-                    v-for="option in candidateOptions"
-                    :key="`${blank.blankId}-${option.label}`"
-                    :type="answers[blank.blankId] === option.word ? 'primary' : 'default'"
-                    :disabled="Boolean(attempt)"
-                    @click="selectAnswer(blank, option.word)"
-                  >
-                    {{ option.label }}
-                  </el-button>
-                  <el-button v-if="answers[blank.blankId] && !attempt" text @click="clearAnswer(blank)">清空</el-button>
-                </div>
-                <div v-if="attempt" class="answer-result">
+            <div class="cloze-passage">
+              <template v-for="(part, index) in clozePassageParts" :key="index">
+                <span v-if="part.type === 'text'">{{ part.text }}</span>
+                <button
+                  v-else
+                  class="cloze-inline-blank"
+                  type="button"
+                  :class="{
+                    active: !attempt && String(selectedBlankId) === String(part.blank.blankId),
+                    answered: Boolean(answers[part.blank.blankId]),
+                    correct: blankAnswer(part.blank.blankId)?.correct === true,
+                    wrong: blankAnswer(part.blank.blankId)?.correct === false,
+                  }"
+                  :disabled="Boolean(attempt)"
+                  @click="setActiveBlank(part.blank)"
+                >
+                  {{ inlineBlankLabel(part.blank) }}
+                </button>
+              </template>
+            </div>
+
+            <div class="cloze-answer-panel">
+              <div class="blank-title-row">
+                <strong>答案</strong>
+                <el-tag :type="allAnswered ? 'success' : 'info'">{{ answeredCount }}/{{ quiz.blanks.length }}</el-tag>
+              </div>
+              <div class="cloze-answer-strip">
+                <button
+                  v-for="blank in quiz.blanks"
+                  :key="blank.blankId"
+                  class="cloze-answer-pill"
+                  type="button"
+                  :class="{
+                    active: !attempt && String(selectedBlankId) === String(blank.blankId),
+                    answered: Boolean(answers[blank.blankId]),
+                    correct: blankAnswer(blank.blankId)?.correct === true,
+                    wrong: blankAnswer(blank.blankId)?.correct === false,
+                  }"
+                  :disabled="Boolean(attempt)"
+                  @click="setActiveBlank(blank)"
+                >
+                  <span>{{ blank.blankNo }}</span>
+                  {{ selectedOptionLabel(blank.blankId) }}
+                </button>
+              </div>
+              <div v-if="activeBlank && !attempt" class="cloze-active-line">
+                <span>当前空格 {{ activeBlank.blankNo }}</span>
+                <el-button v-if="answers[activeBlank.blankId]" text @click="clearAnswer(activeBlank)">清空</el-button>
+              </div>
+              <div v-if="attempt" class="cloze-result-list">
+                <div v-for="blank in quiz.blanks" :key="`result-${blank.blankId}`" class="cloze-result-row">
                   <el-icon :class="blankAnswer(blank.blankId)?.correct ? 'result-correct' : 'result-wrong'">
                     <Check v-if="blankAnswer(blank.blankId)?.correct" />
                     <CircleClose v-else />
                   </el-icon>
+                  <span>空格 {{ blank.blankNo }}</span>
                   <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
                   <span>正确答案：{{ answerOptionLabel(blankAnswer(blank.blankId)?.correctAnswer) }}</span>
+                  <span v-if="blankAnswer(blank.blankId)?.explanation" class="cloze-explanation">
+                    {{ blankAnswer(blank.blankId).explanation }}
+                  </span>
                 </div>
-                <p v-if="attempt && blankAnswer(blank.blankId)?.explanation" class="cloze-explanation">
-                  {{ blankAnswer(blank.blankId).explanation }}
-                </p>
               </div>
             </div>
 
