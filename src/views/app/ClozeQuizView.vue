@@ -36,6 +36,10 @@ const sourceOptions = [
 
 const targetOptions = [5, 6, 7, 8, 9, 10].map((count) => ({ label: `${count} 个词`, value: count }))
 const candidateWords = computed(() => Array.isArray(quiz.value?.candidateWords) ? quiz.value.candidateWords : [])
+const candidateOptions = computed(() => candidateWords.value.map((word, index) => ({
+  label: String.fromCharCode(65 + index),
+  word,
+})))
 const quizReady = computed(() => Boolean(quiz.value?.blanks?.length))
 const allAnswered = computed(() => quizReady.value && quiz.value.blanks.every((blank) => answers[blank.blankId]))
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
@@ -116,8 +120,8 @@ async function generateQuiz() {
     if (!quizId) {
       throw new Error('完形填空生成成功，但没有返回题目 ID')
     }
-    quiz.value = await fetchClozeQuiz(quizId)
-    startedAt.value = Date.now()
+    await loadQuizById(quizId)
+    router.replace({ path: '/app/cloze', query: { quizId } })
     ElMessage.success('练习已生成')
   } catch (error) {
     generateError.value = error.code === 40001
@@ -165,6 +169,17 @@ function clearAnswer(blank) {
 function answerTagType(answer) {
   if (!answer) return 'info'
   return answer.correct ? 'success' : 'danger'
+}
+
+function selectedOptionLabel(blankId) {
+  const selectedWord = answers[blankId]
+  const option = candidateOptions.value.find((candidate) => candidate.word === selectedWord)
+  return option?.label || '未选择'
+}
+
+function answerOptionLabel(word) {
+  const option = candidateOptions.value.find((candidate) => candidate.word === word)
+  return option ? `${option.label}. ${word}` : word
 }
 
 onMounted(async () => {
@@ -235,7 +250,16 @@ onMounted(async () => {
             <div class="cloze-passage">{{ quiz.passage }}</div>
 
             <div class="cloze-candidates">
-              <el-tag v-for="word in candidateWords" :key="word" effect="plain">{{ word }}</el-tag>
+              <button
+                v-for="option in candidateOptions"
+                :key="option.label"
+                class="cloze-option"
+                type="button"
+                disabled
+              >
+                <span>{{ option.label }}</span>
+                {{ option.word }}
+              </button>
             </div>
 
             <div class="cloze-blank-list">
@@ -246,16 +270,16 @@ onMounted(async () => {
                     {{ blankAnswer(blank.blankId)?.correct === true ? '正确' : blankAnswer(blank.blankId)?.correct === false ? '错误' : '待作答' }}
                   </el-tag>
                 </div>
-                <p v-if="blank.hint" class="muted">提示：{{ blank.hint }}</p>
+                <p class="muted">当前选择：{{ selectedOptionLabel(blank.blankId) }}</p>
                 <div class="candidate-buttons">
                   <el-button
-                    v-for="word in candidateWords"
-                    :key="`${blank.blankId}-${word}`"
-                    :type="answers[blank.blankId] === word ? 'primary' : 'default'"
+                    v-for="option in candidateOptions"
+                    :key="`${blank.blankId}-${option.label}`"
+                    :type="answers[blank.blankId] === option.word ? 'primary' : 'default'"
                     :disabled="Boolean(attempt)"
-                    @click="selectAnswer(blank, word)"
+                    @click="selectAnswer(blank, option.word)"
                   >
-                    {{ word }}
+                    {{ option.label }}
                   </el-button>
                   <el-button v-if="answers[blank.blankId] && !attempt" text @click="clearAnswer(blank)">清空</el-button>
                 </div>
@@ -265,7 +289,7 @@ onMounted(async () => {
                     <CircleClose v-else />
                   </el-icon>
                   <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
-                  <span>正确答案：{{ blankAnswer(blank.blankId)?.correctAnswer }}</span>
+                  <span>正确答案：{{ answerOptionLabel(blankAnswer(blank.blankId)?.correctAnswer) }}</span>
                 </div>
                 <p v-if="attempt && blankAnswer(blank.blankId)?.explanation" class="cloze-explanation">
                   {{ blankAnswer(blank.blankId).explanation }}
@@ -283,7 +307,7 @@ onMounted(async () => {
           </el-card>
 
           <el-card v-else class="panel-card mt-16" shadow="never">
-            <EmptyState title="还没有练习" :description="generateError || '完成一组单词后，系统会优先用不认识和模糊的词生成 10 空完形填空。'">
+            <EmptyState title="还没有练习" :description="generateError || '完成一组单词后，系统会优先用本组错词和复习词生成 10 空完形填空。'">
               <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
               <el-button :disabled="!canContinueStudy" @click="router.push('/app/study')">
                 去背单词

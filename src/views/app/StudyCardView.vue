@@ -61,8 +61,27 @@ const studyCompletionRate = computed(() => (
     ? Math.min(100, Math.round((completedItemCount.value / totalItemCount.value) * 100))
     : 0
 ))
+function todayDateString() {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const isLegacyPendingTask = computed(() => {
+  if (!task.value?.taskDate || task.value?.status !== 'PENDING') return false
+  return String(task.value.taskDate) < todayDateString()
+})
 const recallMode = computed(() => phase.value === PHASE_CONFIRM)
 const learningMode = computed(() => phase.value === PHASE_LEARN)
+const pageSubtitle = computed(() => {
+  const groupLabel = `第 ${task.value?.groupNo || 1} 组`
+  if (isLegacyPendingTask.value) {
+    return `${groupLabel}：继续未完成学习组，完成后再进入必做完形填空`
+  }
+  return `${groupLabel}：分段学习、轻量回忆，再进入必做完形填空`
+})
 const flowTitle = computed(() => (flowMode.value === FLOW_RETRY ? '回看没记住的词' : `第 ${segmentIndex.value + 1}/${segmentCount.value || 1} 段`))
 const phaseTitle = computed(() => (learningMode.value ? '完整学习' : '轻量回忆'))
 const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, activeItems.value.length || 1)}/${activeItems.value.length || 0}`)
@@ -476,6 +495,7 @@ function applyFeedbackProgress(response) {
 
 async function generateCompletedGroupCloze(taskId) {
   clearFlowState()
+  card.value = null
   generatingCloze.value = true
   try {
     const task = await createClozeTask(
@@ -562,7 +582,7 @@ onMounted(loadTask)
 
 <template>
   <section>
-    <PageHeader title="单词学习" :subtitle="`第 ${task?.groupNo || 1} 组：分段学习、轻量回忆，再进入必做完形填空`">
+    <PageHeader title="单词学习" :subtitle="pageSubtitle">
       <el-button :icon="Refresh" @click="loadTask">刷新</el-button>
     </PageHeader>
 
@@ -607,6 +627,7 @@ onMounted(loadTask)
         </div>
 
         <div class="study-flow-meta">
+          <el-tag v-if="isLegacyPendingTask" type="warning" effect="plain">继续未完成学习组</el-tag>
           <el-tag effect="plain">{{ flowTitle }}</el-tag>
           <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
           <span>{{ cardPositionLabel }}</span>
