@@ -14,6 +14,7 @@ const formRef = ref()
 const loading = ref(false)
 const loadingWordbooks = ref(false)
 const saving = ref(false)
+const statusOperating = ref('')
 const plan = ref(null)
 const wordbooks = ref([])
 
@@ -89,25 +90,26 @@ async function loadPlan() {
 }
 
 async function submit() {
-  await formRef.value.validate()
-  const newWordsPerGroup = Number(form.newWordsPerGroup)
-  if (newWordsPerGroup > 50) {
-    try {
-      await ElMessageBox.confirm(
-        `本计划每组将生成 ${newWordsPerGroup} 个新词，是否继续？`,
-        '确认每组新词数量',
-        {
-          confirmButtonText: '继续创建',
-          cancelButtonText: '再调整',
-          type: 'warning',
-        },
-      )
-    } catch {
-      return
-    }
-  }
+  if (saving.value) return
   saving.value = true
   try {
+    await formRef.value.validate()
+    const newWordsPerGroup = Number(form.newWordsPerGroup)
+    if (newWordsPerGroup > 50) {
+      try {
+        await ElMessageBox.confirm(
+          `本计划每组将生成 ${newWordsPerGroup} 个新词，是否继续？`,
+          '确认每组新词数量',
+          {
+            confirmButtonText: '继续创建',
+            cancelButtonText: '再调整',
+            type: 'warning',
+          },
+        )
+      } catch {
+        return
+      }
+    }
     plan.value = await createStudyPlan({ ...form, wordbookId: String(form.wordbookId).trim() })
     ElMessage.success('学习计划已创建')
     router.push('/app')
@@ -129,10 +131,10 @@ function startEditPlan() {
 }
 
 async function savePlanSettings() {
-  if (!plan.value?.id) return
-  await editFormRef.value.validate()
+  if (!plan.value?.id || saving.value) return
   saving.value = true
   try {
+    await editFormRef.value.validate()
     plan.value = await updateStudyPlan(plan.value.id, { ...editForm })
     resetEditForm()
     editing.value = false
@@ -143,10 +145,15 @@ async function savePlanSettings() {
 }
 
 async function changeStatus(action) {
-  if (!plan.value?.id) return
+  if (!plan.value?.id || statusOperating.value) return
   const handlers = { pause: pauseStudyPlan, resume: resumeStudyPlan, end: endStudyPlan }
-  plan.value = await handlers[action](plan.value.id)
-  ElMessage.success('计划状态已更新')
+  statusOperating.value = action
+  try {
+    plan.value = await handlers[action](plan.value.id)
+    ElMessage.success('计划状态已更新')
+  } finally {
+    statusOperating.value = ''
+  }
 }
 
 function scrollToCreateForm() {
@@ -193,10 +200,10 @@ onMounted(() => {
             <span>预计 {{ plan.expectedFinishDate }}</span>
           </div>
           <div class="button-row">
-            <el-button @click="startEditPlan">修改计划</el-button>
-            <el-button v-if="plan.status === 'ACTIVE'" @click="changeStatus('pause')">暂停</el-button>
-            <el-button v-if="plan.status === 'PAUSED'" type="primary" @click="changeStatus('resume')">恢复</el-button>
-            <el-button type="danger" plain @click="changeStatus('end')">结束</el-button>
+            <el-button :disabled="Boolean(statusOperating) || saving" @click="startEditPlan">修改计划</el-button>
+            <el-button v-if="plan.status === 'ACTIVE'" :loading="statusOperating === 'pause'" :disabled="Boolean(statusOperating) || saving" @click="changeStatus('pause')">暂停</el-button>
+            <el-button v-if="plan.status === 'PAUSED'" type="primary" :loading="statusOperating === 'resume'" :disabled="Boolean(statusOperating) || saving" @click="changeStatus('resume')">恢复</el-button>
+            <el-button type="danger" plain :loading="statusOperating === 'end'" :disabled="Boolean(statusOperating) || saving" @click="changeStatus('end')">结束</el-button>
           </div>
           <el-form v-if="editing" ref="editFormRef" :model="editForm" :rules="editRules" label-position="top" class="inline-edit-form">
             <el-form-item label="计划名称" prop="name">
@@ -209,7 +216,7 @@ onMounted(() => {
               <el-input-number v-model="editForm.reviewWordsPerGroup" :min="0" :max="600" />
             </el-form-item>
             <div class="button-row">
-              <el-button type="primary" :loading="saving" @click="savePlanSettings">保存设置</el-button>
+              <el-button type="primary" :loading="saving" :disabled="saving || Boolean(statusOperating)" @click="savePlanSettings">保存设置</el-button>
               <el-button @click="editing = false">取消</el-button>
             </div>
           </el-form>
@@ -236,7 +243,7 @@ onMounted(() => {
           <el-form-item label="开始日期" prop="startDate">
             <el-date-picker v-model="form.startDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
           </el-form-item>
-          <el-button type="primary" :loading="saving" class="full-button" @click="submit">创建计划</el-button>
+          <el-button type="primary" :loading="saving" :disabled="saving || Boolean(statusOperating)" class="full-button" @click="submit">创建计划</el-button>
         </el-form>
       </el-card>
     </div>

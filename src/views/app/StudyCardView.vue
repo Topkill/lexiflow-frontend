@@ -303,6 +303,7 @@ function restoreLocalFlow() {
 }
 
 async function loadTask() {
+  if (loading.value || submitting.value) return
   loading.value = true
   try {
     cleanupExpiredStudyFlowStates()
@@ -494,6 +495,7 @@ function applyFeedbackProgress(response) {
 }
 
 async function generateCompletedGroupCloze(taskId) {
+  if (generatingCloze.value) return
   clearFlowState()
   card.value = null
   generatingCloze.value = true
@@ -520,7 +522,7 @@ async function generateCompletedGroupCloze(taskId) {
 }
 
 async function toggleFavorite() {
-  if (!card.value?.wordbookId || !card.value?.wordId) return
+  if (!card.value?.wordbookId || !card.value?.wordId || favoriteOperating.value) return
   favoriteOperating.value = true
   try {
     if (card.value.favorite) {
@@ -544,7 +546,7 @@ function openAiQuestion() {
 }
 
 async function askAi(regenerate = false) {
-  if (!card.value?.wordId || !card.value?.wordbookId) return
+  if (!card.value?.wordId || !card.value?.wordbookId || aiLoading.value || aiRegenerating.value) return
   const question = aiQuestion.value.trim()
   if (!question) {
     ElMessage.warning('请输入你想问的问题')
@@ -583,7 +585,7 @@ onMounted(loadTask)
 <template>
   <section>
     <PageHeader title="单词学习" :subtitle="pageSubtitle">
-      <el-button :icon="Refresh" @click="loadTask">刷新</el-button>
+      <el-button :icon="Refresh" :disabled="loading || submitting || generatingCloze" @click="loadTask">刷新</el-button>
     </PageHeader>
 
     <el-skeleton v-if="loading" :rows="6" animated />
@@ -621,6 +623,7 @@ onMounted(loadTask)
             :icon="card.favorite ? StarFilled : Star"
             :type="card.favorite ? 'warning' : 'default'"
             :loading="favoriteOperating"
+            :disabled="favoriteOperating"
             :title="card.favorite ? '取消收藏' : '收藏单词'"
             @click="toggleFavorite"
           />
@@ -712,7 +715,7 @@ onMounted(loadTask)
         />
         <div class="button-row">
           <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
-          <el-button type="primary" :icon="ChatLineRound" :loading="aiLoading" @click="askAi(false)">提问</el-button>
+          <el-button type="primary" :icon="ChatLineRound" :loading="aiLoading" :disabled="aiLoading || aiRegenerating" @click="askAi(false)">提问</el-button>
         </div>
       </div>
 
@@ -721,7 +724,7 @@ onMounted(loadTask)
         <div class="ai-content-panel">
           <div class="card-header-row">
             <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiResult.cacheHit ? '缓存命中' : '新生成' }}</el-tag>
-            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" @click="askAi(true)">重新回答</el-button>
+            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" :disabled="aiLoading || aiRegenerating" @click="askAi(true)">重新回答</el-button>
           </div>
 
           <p class="ai-brief">{{ aiResult.content.answer }}</p>

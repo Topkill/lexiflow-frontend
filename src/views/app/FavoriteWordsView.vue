@@ -32,6 +32,7 @@ async function loadWordbooks() {
 }
 
 async function loadData() {
+  if (loading.value) return
   loading.value = true
   try {
     page.value = await fetchFavoriteWords(queryParams())
@@ -43,6 +44,7 @@ async function loadData() {
 }
 
 async function removeFavorite(row) {
+  if (deletingId.value) return
   deletingId.value = row.favoriteWordId
   try {
     await deleteFavoriteWord(row.favoriteWordId)
@@ -72,7 +74,7 @@ onMounted(() => {
 <template>
   <section>
     <PageHeader title="收藏词" subtitle="复盘你主动标记的重要单词">
-      <el-button :icon="Refresh" @click="loadData">刷新</el-button>
+      <el-button :icon="Refresh" :disabled="loading || Boolean(deletingId)" @click="loadData">刷新</el-button>
     </PageHeader>
     <el-card class="panel-card" shadow="never">
       <div class="admin-filter-row">
@@ -91,7 +93,7 @@ onMounted(() => {
           <el-table-column prop="createdAt" label="收藏时间" width="180" />
           <el-table-column label="操作" width="120">
             <template #default="{ row }">
-              <el-button text type="danger" :icon="Delete" :loading="deletingId === row.favoriteWordId" @click="removeFavorite(row)">取消</el-button>
+              <el-button text type="danger" :icon="Delete" :loading="deletingId === row.favoriteWordId" :disabled="Boolean(deletingId)" @click="removeFavorite(row)">取消</el-button>
             </template>
           </el-table-column>
         </el-table>

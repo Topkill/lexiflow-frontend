@@ -29,9 +29,10 @@ const rules = {
 }
 
 async function submit() {
-  await formRef.value.validate()
+  if (loading.value) return
   loading.value = true
   try {
+    await formRef.value.validate()
     await auth.register(form)
     ElMessage.success('注册成功，请登录')
     router.push('/login')
@@ -68,7 +69,7 @@ async function submit() {
             <template #prefix><el-icon><Lock /></el-icon></template>
           </el-input>
         </el-form-item>
-        <el-button type="primary" size="large" :loading="loading" class="full-button" @click="submit">注册</el-button>
+        <el-button type="primary" size="large" :loading="loading" :disabled="loading" class="full-button" @click="submit">注册</el-button>
       </el-form>
 
       <div class="auth-footer">

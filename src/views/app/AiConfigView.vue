@@ -21,6 +21,7 @@ async function loadConfig() {
 }
 
 async function save() {
+  if (saving.value) return
   saving.value = true
   try {
     await saveUserAiConfig(form)
@@ -54,7 +55,7 @@ onMounted(loadConfig)
           />
         </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
-        <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+        <el-button type="primary" :loading="saving" :disabled="saving" @click="save">保存配置</el-button>
       </el-form>
     </el-card>
   </section>

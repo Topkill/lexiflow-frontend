@@ -136,6 +136,7 @@ function applyRouteGenerateError() {
 }
 
 async function generateQuiz() {
+  if (generating.value) return
   if (!todayTask.value?.taskId) {
     ElMessage.warning('请先生成学习组')
     return
@@ -177,7 +178,7 @@ async function loadQuizById(quizId) {
 }
 
 async function submitAnswers() {
-  if (!quiz.value?.quizId || !allAnswered.value) return
+  if (!quiz.value?.quizId || !allAnswered.value || submitting.value || generating.value) return
   submitting.value = true
   try {
     const durationSeconds = startedAt.value ? Math.max(0, Math.round((Date.now() - startedAt.value) / 1000)) : 0
@@ -418,11 +419,11 @@ onMounted(async () => {
             </div>
 
             <div class="cloze-submit-row">
-              <el-button :disabled="Boolean(attempt) || !allAnswered" type="primary" :loading="submitting" @click="submitAnswers">
+              <el-button :disabled="Boolean(attempt) || !allAnswered || submitting || generating" type="primary" :loading="submitting" @click="submitAnswers">
                 提交答案
               </el-button>
               <el-button v-if="attempt" type="primary" @click="router.push('/app/study')">继续下一组</el-button>
-              <el-button v-if="attempt" @click="generateQuiz">再练一组</el-button>
+              <el-button v-if="attempt" :loading="generating" :disabled="generating" @click="generateQuiz">再练一组</el-button>
             </div>
           </el-card>
 

@@ -38,6 +38,7 @@ async function loadWordbooks() {
 }
 
 async function loadData() {
+  if (loading.value) return
   loading.value = true
   try {
     page.value = await fetchWrongWords(queryParams())
@@ -49,6 +50,7 @@ async function loadData() {
 }
 
 async function resolve(row) {
+  if (resolvingId.value) return
   resolvingId.value = row.wrongWordId || row.id
   try {
     await resolveWrongWord(resolvingId.value)
@@ -60,6 +62,7 @@ async function resolve(row) {
 }
 
 async function startPractice() {
+  if (practicing.value) return
   practicing.value = true
   try {
     const task = await createWrongWordPractice({ limit: 10 })
@@ -93,8 +96,8 @@ onMounted(() => {
 <template>
   <section>
     <PageHeader title="错词本" subtitle="集中处理不认识和测验答错的单词">
-      <el-button :icon="Refresh" @click="loadData">刷新</el-button>
-      <el-button type="primary" :icon="VideoPlay" :loading="practicing" :disabled="page.records.length === 0" @click="startPractice">专项复习</el-button>
+      <el-button :icon="Refresh" :disabled="loading || practicing || Boolean(resolvingId)" @click="loadData">刷新</el-button>
+      <el-button type="primary" :icon="VideoPlay" :loading="practicing" :disabled="page.records.length === 0 || practicing || Boolean(resolvingId)" @click="startPractice">专项复习</el-button>
     </PageHeader>
     <el-card class="panel-card" shadow="never">
       <div class="admin-filter-row">
@@ -125,7 +128,7 @@ onMounted(() => {
           <el-table-column prop="lastWrongAt" label="最近错误" width="180" />
           <el-table-column label="操作" width="120">
             <template #default="{ row }">
-              <el-button text type="primary" :loading="resolvingId === row.wrongWordId" @click="resolve(row)">解决</el-button>
+              <el-button text type="primary" :loading="resolvingId === row.wrongWordId" :disabled="Boolean(resolvingId)" @click="resolve(row)">解决</el-button>
             </template>
           </el-table-column>
         </el-table>

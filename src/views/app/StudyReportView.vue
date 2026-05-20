@@ -43,6 +43,7 @@ function reportQueryParams() {
 }
 
 async function loadReports(selectFirst = true) {
+  if (loading.value) return
   loading.value = true
   try {
     page.value = await fetchReports(reportQueryParams())
@@ -61,6 +62,7 @@ async function selectReport(report) {
 }
 
 async function createReport() {
+  if (creating.value) return
   if (!todayTask.value?.taskId) {
     ElMessage.warning(taskError.value || '请先生成学习组')
     return
@@ -106,7 +108,7 @@ function handleReportPageChange(currentPage) {
 <template>
   <section>
     <PageHeader title="学习报告" subtitle="每日完成学习后生成 AI 反馈">
-      <el-button :icon="Refresh" @click="refreshPage">刷新</el-button>
+      <el-button :icon="Refresh" :disabled="creating || loading || loadingTask" @click="refreshPage">刷新</el-button>
     </PageHeader>
 
     <div class="report-layout">
@@ -124,7 +126,7 @@ function handleReportPageChange(currentPage) {
               :closable="false"
               :title="taskError"
             />
-            <el-button class="full-button" type="primary" :loading="creating" :disabled="!todayTask?.taskId" @click="createReport">
+            <el-button class="full-button" type="primary" :loading="creating" :disabled="creating || !todayTask?.taskId" @click="createReport">
               生成报告
             </el-button>
           </el-form>
