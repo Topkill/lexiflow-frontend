@@ -1326,6 +1326,17 @@ a {
   flex: 0 0 auto;
 }
 
+.word-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.word-card-actions .el-button {
+  margin-left: 0 !important;
+}
+
 .study-page .word-card-meta .el-tag,
 .study-flow-meta .el-tag {
   border-color: transparent;
@@ -3123,7 +3134,7 @@ a {
   }
 
   .study-word-card .el-card__body {
-    padding: 14px 2px 24px;
+    padding: 14px 16px 24px;
   }
 
   .study-word-title {

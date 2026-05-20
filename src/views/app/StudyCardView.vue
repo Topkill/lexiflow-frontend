@@ -807,16 +807,21 @@ onBeforeUnmount(stopPronunciation)
             <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
             <span v-if="card.masteryStatus && card.masteryStatus !== card.itemType">{{ card.masteryStatus }}</span>
           </div>
-          <el-button
-            circle
-            :type="card.favorite ? 'warning' : 'default'"
-            :loading="favoriteOperating"
-            :disabled="favoriteOperating"
-            :title="card.favorite ? '取消收藏' : '收藏单词'"
-            @click="toggleFavorite"
-          >
-            <LexiIcon :name="card.favorite ? 'star-filled' : 'star'" />
-          </el-button>
+          <div class="word-card-actions">
+            <el-button circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
+              <el-icon><ChatLineRound /></el-icon>
+            </el-button>
+            <el-button
+              circle
+              :type="card.favorite ? 'warning' : 'default'"
+              :loading="favoriteOperating"
+              :disabled="favoriteOperating"
+              :title="card.favorite ? '取消收藏' : '收藏单词'"
+              @click="toggleFavorite"
+            >
+              <LexiIcon :name="card.favorite ? 'star-filled' : 'star'" />
+            </el-button>
+          </div>
         </div>
 
         <div class="study-flow-meta">
@@ -906,10 +911,6 @@ onBeforeUnmount(stopPronunciation)
             </div>
           </div>
         </template>
-
-        <div class="ai-action-row">
-          <el-button :icon="ChatLineRound" @click="openAiQuestion">AI 问答</el-button>
-        </div>
 
         <div v-if="learningMode" class="feedback-row">
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" :disabled="submitting || generatingCloze" @click="goNextLearnCard">
