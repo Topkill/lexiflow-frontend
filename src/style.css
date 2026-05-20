@@ -1337,6 +1337,53 @@ a {
   margin-left: 0 !important;
 }
 
+.ai-toolbar-button.el-button {
+  border-color: rgba(27, 188, 177, 0.36);
+  background: linear-gradient(135deg, #e0fbf6 0%, #fff1d9 100%);
+  color: #0f8f86;
+}
+
+.ai-toolbar-button.el-button:hover {
+  border-color: rgba(27, 188, 177, 0.56);
+  background: linear-gradient(135deg, #c9f6ee 0%, #ffe5ba 100%);
+  color: #0b766f;
+}
+
+.ai-toolbar-svg {
+  width: 23px;
+  height: 23px;
+  overflow: visible;
+}
+
+.ai-bubble {
+  fill: rgba(255, 253, 245, 0.78);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.55;
+}
+
+.ai-letter {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.65;
+}
+
+.ai-spark {
+  fill: #e88b32;
+  transform-origin: 18px 5.6px;
+}
+
+.ai-toolbar-button.el-button:hover .ai-spark {
+  transform: scale(1.12) rotate(8deg);
+}
+
+.study-card-scroll {
+  min-height: 0;
+}
+
 .study-page .word-card-meta .el-tag,
 .study-flow-meta .el-tag {
   border-color: transparent;
@@ -1698,6 +1745,35 @@ a {
   min-width: 0;
   color: var(--muted);
   line-height: 1.6;
+}
+
+@media (min-width: 1081px) {
+  .study-page .study-word-card {
+    min-height: 0;
+    height: clamp(520px, calc(100vh - 250px), 680px);
+  }
+
+  .study-page .study-word-card .el-card__body {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .study-page .study-card-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 0 4px 4px;
+    scrollbar-gutter: stable;
+  }
+
+  .study-page .feedback-row {
+    flex: 0 0 auto;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(89, 197, 179, 0.16);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 253, 245, 0.94) 40%);
+  }
 }
 
 .ai-brief,

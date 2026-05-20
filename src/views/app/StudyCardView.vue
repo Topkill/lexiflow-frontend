@@ -808,8 +808,12 @@ onBeforeUnmount(stopPronunciation)
             <span v-if="card.masteryStatus && card.masteryStatus !== card.itemType">{{ card.masteryStatus }}</span>
           </div>
           <div class="word-card-actions">
-            <el-button circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
-              <el-icon><ChatLineRound /></el-icon>
+            <el-button class="ai-toolbar-button" circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
+              <svg class="ai-toolbar-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path class="ai-bubble" d="M5.2 6.4c1.4-2 4.4-3 7.2-2.6 3.4.4 6 2.5 6.3 5.3.4 3.3-2.5 6.1-6.3 6.5-1 .1-1.9.1-2.8-.1L5 18.1l1.2-4.2c-1.7-1.6-2.2-4.8-1-7.5Z" />
+                <path class="ai-spark" d="M18.2 3.8l.4 1.4 1.3.4-1.3.5-.4 1.3-.5-1.3-1.3-.5 1.3-.4.5-1.4Z" />
+                <path class="ai-letter" d="M8 13.1 9.7 7l1.8 6.1M8.6 11h2.3M14.3 7.2v5.9M13.4 7.2h1.8M13.4 13.1h1.8" />
+              </svg>
             </el-button>
             <el-button
               circle
@@ -824,93 +828,95 @@ onBeforeUnmount(stopPronunciation)
           </div>
         </div>
 
-        <div class="study-flow-meta">
-          <el-tag v-if="isLegacyPendingTask" type="warning" effect="plain">继续未完成学习组</el-tag>
-          <el-tag effect="plain">{{ flowTitle }}</el-tag>
-          <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
-          <span>{{ cardPositionLabel }}</span>
-        </div>
+        <div class="study-card-scroll">
+          <div class="study-flow-meta">
+            <el-tag v-if="isLegacyPendingTask" type="warning" effect="plain">继续未完成学习组</el-tag>
+            <el-tag effect="plain">{{ flowTitle }}</el-tag>
+            <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
+            <span>{{ cardPositionLabel }}</span>
+          </div>
 
-        <div class="study-word-title">
-          <h1>{{ card.word }}</h1>
-        </div>
-        <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
-          <span v-if="card.phonetic0" class="phonetic-item">
-            英 {{ card.phonetic0 }}
-            <el-button
-              circle
-              text
-              class="phonetic-audio-button"
-              :class="{ 'is-playing': pronunciationLoadingType === '1' }"
-              :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '1') || !card.word"
-              title="播放英式发音"
-              aria-label="播放英式发音"
-              @click="playPronunciation('1')"
-            >
-              <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
-                <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
-              </svg>
-            </el-button>
-          </span>
-          <span v-if="card.phonetic1" class="phonetic-item">
-            美 {{ card.phonetic1 }}
-            <el-button
-              circle
-              text
-              class="phonetic-audio-button"
-              :class="{ 'is-playing': pronunciationLoadingType === '2' }"
-              :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '2') || !card.word"
-              title="播放美式发音"
-              aria-label="播放美式发音"
-              @click="playPronunciation('2')"
-            >
-              <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
-                <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
-              </svg>
-            </el-button>
-          </span>
-        </div>
+          <div class="study-word-title">
+            <h1>{{ card.word }}</h1>
+          </div>
+          <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
+            <span v-if="card.phonetic0" class="phonetic-item">
+              英 {{ card.phonetic0 }}
+              <el-button
+                circle
+                text
+                class="phonetic-audio-button"
+                :class="{ 'is-playing': pronunciationLoadingType === '1' }"
+                :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '1') || !card.word"
+                title="播放英式发音"
+                aria-label="播放英式发音"
+                @click="playPronunciation('1')"
+              >
+                <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
+                  <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
+                </svg>
+              </el-button>
+            </span>
+            <span v-if="card.phonetic1" class="phonetic-item">
+              美 {{ card.phonetic1 }}
+              <el-button
+                circle
+                text
+                class="phonetic-audio-button"
+                :class="{ 'is-playing': pronunciationLoadingType === '2' }"
+                :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '2') || !card.word"
+                title="播放美式发音"
+                aria-label="播放美式发音"
+                @click="playPronunciation('2')"
+              >
+                <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
+                  <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
+                </svg>
+              </el-button>
+            </span>
+          </div>
 
-        <p class="study-flow-hint">{{ flowHint }}</p>
+          <p class="study-flow-hint">{{ flowHint }}</p>
 
-        <template v-if="learningMode">
-          <div v-if="cardDefinitions.length" class="definition-block revealed">
-            <div
-              v-for="definition in cardDefinitions"
-              :key="definition.key"
-              class="definition-line"
-              :class="{ 'without-pos': !definition.pos }"
-            >
-              <span v-if="definition.pos" class="definition-pos">{{ definition.pos }}</span>
-              <div class="definition-text-list">
-                <template v-for="(text, index) in definition.definitions" :key="`${definition.key}-${text}`">
-                  <span class="definition-text">{{ text }}</span>
-                  <span v-if="index < definition.definitions.length - 1" class="definition-separator">/</span>
-                </template>
+          <template v-if="learningMode">
+            <div v-if="cardDefinitions.length" class="definition-block revealed">
+              <div
+                v-for="definition in cardDefinitions"
+                :key="definition.key"
+                class="definition-line"
+                :class="{ 'without-pos': !definition.pos }"
+              >
+                <span v-if="definition.pos" class="definition-pos">{{ definition.pos }}</span>
+                <div class="definition-text-list">
+                  <template v-for="(text, index) in definition.definitions" :key="`${definition.key}-${text}`">
+                    <span class="definition-text">{{ text }}</span>
+                    <span v-if="index < definition.definitions.length - 1" class="definition-separator">/</span>
+                  </template>
+                </div>
               </div>
             </div>
-          </div>
-          <div v-if="cardSentences.length" class="example-list">
-            <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
-              <p v-html="sentence.highlightedEnglish"></p>
-              <span>{{ sentence.cn }}</span>
-              <div v-if="sentence.phrase" class="example-phrase">
-                <span>搭配</span>
-                <strong>{{ sentence.phrase }}</strong>
+            <div v-if="cardSentences.length" class="example-list">
+              <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
+                <p v-html="sentence.highlightedEnglish"></p>
+                <span>{{ sentence.cn }}</span>
+                <div v-if="sentence.phrase" class="example-phrase">
+                  <span>搭配</span>
+                  <strong>{{ sentence.phrase }}</strong>
+                </div>
               </div>
             </div>
-          </div>
-        </template>
+          </template>
 
-        <template v-else>
-          <div v-if="cardSentences.length" class="example-list recall-example-list">
-            <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
-              <p v-html="sentence.highlightedEnglish"></p>
+          <template v-else>
+            <div v-if="cardSentences.length" class="example-list recall-example-list">
+              <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
+                <p v-html="sentence.highlightedEnglish"></p>
+              </div>
             </div>
-          </div>
-        </template>
+          </template>
+        </div>
 
         <div v-if="learningMode" class="feedback-row">
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" :disabled="submitting || generatingCloze" @click="goNextLearnCard">
