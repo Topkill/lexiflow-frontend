@@ -95,6 +95,7 @@ function blankAnswer(blankId) {
 }
 
 async function loadTodayTask() {
+  if (generating.value) return
   loadingTask.value = true
   loadError.value = ''
   try {
@@ -266,7 +267,7 @@ onMounted(async () => {
 <template>
   <section>
     <PageHeader title="AI 完形填空" subtitle="基于今日新词和错词生成选词填空">
-      <el-button :icon="Refresh" @click="loadTodayTask">刷新任务</el-button>
+      <el-button :icon="Refresh" :disabled="generating" @click="loadTodayTask">刷新任务</el-button>
     </PageHeader>
 
     <el-skeleton v-if="loadingTask" :rows="6" animated />
@@ -301,12 +302,26 @@ onMounted(async () => {
               <el-form-item label="目标词数">
                 <el-segmented v-model="form.targetWordCount" :options="targetOptions" :disabled="form.sourceType === 'COMPLETED_GROUP'" />
               </el-form-item>
-              <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
-                {{ quiz ? '重新生成练习' : '生成练习' }}
-              </el-button>
+              <div class="cloze-generate-row">
+                <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
+                  {{ quiz ? '重新生成练习' : '生成练习' }}
+                </el-button>
+              </div>
             </el-form>
             <el-alert v-if="generateHint" class="mt-16" type="info" :title="generateHint" :closable="false" />
             <el-alert v-if="generateError" class="mt-16" type="warning" :title="generateError" :closable="false" />
+          </el-card>
+
+          <el-card v-if="generating" class="panel-card mt-16 cloze-generating-card" shadow="never">
+            <div class="cloze-generating-visual" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div>
+              <strong>正在生成必做完形填空</strong>
+              <p>AI 正在组织英文短文，系统会自动挖空并校验答案。</p>
+            </div>
           </el-card>
 
           <el-card v-if="quiz" class="panel-card mt-16" shadow="never">

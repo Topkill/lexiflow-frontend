@@ -759,13 +759,85 @@ a {
 
 .cloze-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
 }
 
 .cloze-form .el-form-item {
   margin-bottom: 0;
+}
+
+.cloze-generate-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cloze-generate-row .el-button {
+  min-width: 128px;
+  margin-left: 0 !important;
+}
+
+.cloze-generating-card .el-card__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cloze-generating-card strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.cloze-generating-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.cloze-generating-visual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.cloze-generating-visual span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  animation: cloze-bounce 0.9s ease-in-out infinite;
+}
+
+.cloze-generating-visual span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.cloze-generating-visual span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+@keyframes cloze-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
 }
 
 .cloze-passage {
