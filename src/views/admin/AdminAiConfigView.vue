@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Check, CirclePlus, Edit, Open, Refresh, TurnOff } from '@element-plus/icons-vue'
+import { CirclePlus, Edit, Open, Refresh, TurnOff } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import {
@@ -232,7 +232,6 @@ onMounted(loadData)
                 size="small"
                 plain
                 type="success"
-                :icon="Check"
                 :disabled="row.active || !row.enabled || !row.keyConfigured"
                 :loading="operatingId === row.id"
                 @click="activateConfig(row)"
