@@ -179,6 +179,13 @@ a {
   overflow-y: auto;
 }
 
+.app-sidebar {
+  padding: 16px 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: #202124;
+  box-shadow: inset -1px 0 0 rgba(0, 0, 0, 0.18);
+}
+
 .admin-sidebar {
   width: 236px;
   flex-basis: 236px;
@@ -186,6 +193,36 @@ a {
 
 .brand-row {
   padding: 8px 8px 18px;
+}
+
+.app-sidebar .brand-row {
+  gap: 10px;
+  padding: 6px 8px 18px;
+}
+
+.app-sidebar .brand-mark {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #f0f2f4;
+  color: #2a2d32;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.app-sidebar .brand-name {
+  color: rgba(255, 255, 255, 0.88);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.app-sidebar .brand-subtitle {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
 }
 
 .brand-row.compact {
@@ -197,6 +234,10 @@ a {
   background: transparent;
 }
 
+.app-sidebar .side-menu {
+  padding-top: 4px;
+}
+
 .side-menu .el-menu-item {
   height: 42px;
   margin: 3px 0;
@@ -204,10 +245,42 @@ a {
   color: #cbd5e1;
 }
 
+.app-sidebar .side-menu .el-menu-item {
+  height: 39px;
+  margin: 2px 0;
+  padding: 0 10px !important;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 520;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.app-sidebar .side-menu .el-menu-item .el-icon {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 17px;
+}
+
 .side-menu .el-menu-item:hover,
 .side-menu .el-menu-item.is-active {
   background: var(--sidebar-soft);
   color: #fff;
+}
+
+.app-sidebar .side-menu .el-menu-item:hover,
+.app-sidebar .side-menu .el-menu-item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-sidebar .side-menu .el-menu-item.is-active {
+  box-shadow: inset 2px 0 0 #dfe3e8;
+}
+
+.app-sidebar .side-menu .el-menu-item:hover .el-icon,
+.app-sidebar .side-menu .el-menu-item.is-active .el-icon {
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .app-main,
@@ -1526,6 +1599,11 @@ a {
   .report-layout {
     grid-template-columns: 1fr;
   }
+
+  .study-page .progress-side {
+    position: static;
+    top: auto;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1643,6 +1721,41 @@ a {
     gap: 12px;
   }
 
+  .study-page .study-card-layout {
+    gap: 10px;
+  }
+
+  .study-page .progress-side {
+    order: -1;
+    border-color: rgba(221, 228, 238, 0.7) !important;
+    background: rgba(255, 255, 255, 0.56);
+  }
+
+  .study-page .progress-side .el-card__header {
+    display: none;
+  }
+
+  .study-page .progress-side .el-card__body {
+    padding: 10px 12px;
+  }
+
+  .study-page .progress-side .el-progress {
+    margin-bottom: 8px;
+  }
+
+  .study-page .progress-side .task-lines.vertical {
+    flex-direction: row;
+    gap: 6px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .study-page .progress-side .task-lines.vertical span {
+    min-width: 0;
+    color: #747b88;
+    overflow-wrap: anywhere;
+  }
+
   .wordbook-grid {
     grid-template-columns: 1fr;
   }
@@ -1715,9 +1828,16 @@ a {
     min-height: 0;
   }
 
-  .study-word-card h1 {
+  .study-word-card .el-card__body {
+    padding: 14px 2px 24px;
+  }
+
+  .study-word-title {
+    margin-top: 28px;
+  }
+
+  .study-word-title h1 {
     font-size: 42px;
-    margin-top: 24px;
   }
 
   .study-word-card {
@@ -1729,28 +1849,42 @@ a {
     font-size: 15px;
   }
 
-  .definition-block,
-  .example-block {
-    padding: 14px;
+  .definition-block {
+    padding: 10px 0 12px;
   }
 
   .definition-block {
-    gap: 10px;
+    gap: 0;
   }
 
   .definition-line {
-    gap: 8px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 10px;
+    padding: 7px 0;
   }
 
   .definition-pos {
-    min-width: 36px;
-    min-height: 24px;
-    padding: 2px 7px;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
   }
 
-  .definition-text-list strong {
+  .definition-text {
     font-size: 16px;
-    line-height: 1.55;
+    line-height: 1.65;
+  }
+
+  .example-list {
+    margin-top: 18px;
+  }
+
+  .example-block {
+    padding: 14px 0;
+  }
+
+  .example-block p {
+    font-size: 16px;
+    line-height: 1.72;
   }
 
   .feedback-row .el-button {
