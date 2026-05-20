@@ -115,10 +115,15 @@ function handleReportPageChange(currentPage) {
       <div class="report-left">
         <el-card class="panel-card" shadow="never" v-loading="loadingTask">
           <template #header>生成日报</template>
-          <el-form label-position="top">
-            <el-form-item label="报告日期">
-              <el-date-picker v-model="form.reportDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
-            </el-form-item>
+          <el-form class="report-create-form" label-position="top">
+            <div class="report-create-row">
+              <el-form-item label="报告日期" class="report-date-field">
+                <el-date-picker v-model="form.reportDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
+              </el-form-item>
+              <el-button class="report-create-button" type="primary" :loading="creating" :disabled="creating || !todayTask?.taskId" @click="createReport">
+                生成报告
+              </el-button>
+            </div>
             <el-alert
               v-if="taskError"
               class="mb-16"
@@ -126,9 +131,6 @@ function handleReportPageChange(currentPage) {
               :closable="false"
               :title="taskError"
             />
-            <el-button class="full-button" type="primary" :loading="creating" :disabled="creating || !todayTask?.taskId" @click="createReport">
-              生成报告
-            </el-button>
           </el-form>
         </el-card>
 

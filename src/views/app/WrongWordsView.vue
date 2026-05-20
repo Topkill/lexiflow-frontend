@@ -49,12 +49,12 @@ async function loadData() {
   }
 }
 
-async function resolve(row) {
+async function markMastered(row) {
   if (resolvingId.value) return
   resolvingId.value = row.wrongWordId || row.id
   try {
     await resolveWrongWord(resolvingId.value)
-    ElMessage.success('已标记解决')
+    ElMessage.success('已标记为掌握')
     await loadData()
   } finally {
     resolvingId.value = ''
@@ -126,9 +126,9 @@ onMounted(() => {
           <el-table-column prop="primaryDefinition" label="释义" min-width="220" />
           <el-table-column prop="wrongCount" label="错误次数" width="110" />
           <el-table-column prop="lastWrongAt" label="最近错误" width="180" />
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="132">
             <template #default="{ row }">
-              <el-button text type="primary" :loading="resolvingId === row.wrongWordId" :disabled="Boolean(resolvingId)" @click="resolve(row)">解决</el-button>
+              <el-button text type="primary" :loading="resolvingId === row.wrongWordId" :disabled="Boolean(resolvingId)" @click="markMastered(row)">标为掌握</el-button>
             </template>
           </el-table-column>
         </el-table>

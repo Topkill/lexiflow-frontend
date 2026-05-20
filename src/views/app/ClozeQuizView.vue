@@ -73,7 +73,6 @@ const clozePassageParts = computed(() => {
   return parts
 })
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
-const pendingCount = computed(() => todayTask.value?.items?.filter((item) => item.status === 'PENDING').length || 0)
 const taskDone = computed(() => todayTask.value?.status === 'DONE')
 const completedGroupReady = computed(() => taskDone.value && totalCount.value > 0)
 const generateDisabled = computed(() => generating.value || (form.sourceType === 'COMPLETED_GROUP' && !completedGroupReady.value))
@@ -296,13 +295,13 @@ onMounted(async () => {
               </div>
             </template>
             <el-form class="cloze-form" label-position="top">
-              <el-form-item label="生成来源">
+              <el-form-item label="生成来源" class="cloze-source-field">
                 <el-segmented v-model="form.sourceType" :options="sourceOptions" />
               </el-form-item>
-              <el-form-item label="目标词数">
-                <el-input-number v-model="form.targetWordCount" :min="5" :max="10" :step="1" controls-position="right" />
-              </el-form-item>
-              <div class="cloze-generate-row">
+              <div class="cloze-target-actions">
+                <el-form-item label="目标词数" class="cloze-target-field">
+                  <el-input-number v-model="form.targetWordCount" :min="5" :max="10" :step="1" controls-position="right" />
+                </el-form-item>
                 <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
                   {{ quiz ? '重新生成练习' : '生成练习' }}
                 </el-button>
@@ -437,19 +436,6 @@ onMounted(async () => {
           </el-card>
         </div>
 
-        <el-card class="panel-card cloze-side" shadow="never">
-          <template #header>第 {{ todayTask?.groupNo || 1 }} 组</template>
-          <div class="task-summary compact">
-            <el-progress :percentage="todayTask.progress?.completionRate ?? todayTask.completionRate ?? 0" />
-            <div class="task-lines vertical">
-              <span>新词 {{ todayTask.newCount || 0 }}</span>
-              <span>复习 {{ todayTask.reviewCount || 0 }}</span>
-              <span>专项 {{ todayTask.extraCount || 0 }}</span>
-              <span>待完成 {{ pendingCount }}</span>
-              <span>总计 {{ totalCount }}</span>
-            </div>
-          </div>
-        </el-card>
       </div>
     </template>
   </section>
