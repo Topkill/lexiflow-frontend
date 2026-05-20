@@ -56,7 +56,7 @@ async function handleLogout() {
 
     <section class="app-main">
       <header class="topbar">
-        <div>
+        <div class="topbar-heading">
           <div class="topbar-title">{{ route.meta.title || 'LexiFlow' }}</div>
           <div class="topbar-date">{{ new Date().toLocaleDateString('zh-CN') }}</div>
         </div>

@@ -90,8 +90,8 @@ const pageSubtitle = computed(() => {
   }
   return `${groupLabel}：分段学习、轻量回忆，再进入必做完形填空`
 })
-const flowTitle = computed(() => (flowMode.value === FLOW_RETRY ? '回看没记住的词' : `第 ${segmentIndex.value + 1}/${segmentCount.value || 1} 段`))
-const phaseTitle = computed(() => (learningMode.value ? '完整学习' : '轻量回忆'))
+const flowTitle = computed(() => `第 ${segmentIndex.value + 1}/${segmentCount.value || 1} 段`)
+const phaseTitle = computed(() => (learningMode.value ? '学习' : '回忆'))
 const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, activeItems.value.length || 1)}/${activeItems.value.length || 0}`)
 const learnActionLabel = computed(() => {
   if (flowMode.value === FLOW_RETRY) return '我再回忆一次'
@@ -843,7 +843,11 @@ onBeforeUnmount(() => {
           <div class="word-card-meta">
             <el-tag>{{ card.itemType }}</el-tag>
             <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
-            <span v-if="card.masteryStatus && card.masteryStatus !== card.itemType">{{ card.masteryStatus }}</span>
+          </div>
+          <div class="study-flow-meta">
+            <el-tag effect="plain">{{ flowTitle }}</el-tag>
+            <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
+            <el-tag effect="plain">进度：{{ cardPositionLabel }}</el-tag>
           </div>
           <div class="word-card-actions">
             <el-button class="ai-toolbar-button" circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
@@ -863,13 +867,6 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="study-card-scroll">
-          <div class="study-flow-meta">
-            <el-tag v-if="isLegacyPendingTask" type="warning" effect="plain">继续未完成学习组</el-tag>
-            <el-tag effect="plain">{{ flowTitle }}</el-tag>
-            <el-tag :type="recallMode ? 'warning' : 'success'" effect="plain">{{ phaseTitle }}</el-tag>
-            <span>{{ cardPositionLabel }}</span>
-          </div>
-
           <div class="study-word-title">
             <h1>{{ card.word }}</h1>
           </div>
