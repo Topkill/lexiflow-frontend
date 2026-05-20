@@ -95,6 +95,18 @@ const flowHint = computed(() => {
   return learningMode.value ? '先快速理解本段单词，随后会折叠中文释义做轻量回忆。' : '现在只看英文信息，确认自己能不能想起中文意思。'
 })
 const aiQuestionPlaceholder = computed(() => card.value?.word ? `例如：${card.value.word} 的反义词有哪些？` : '例如：这个词的反义词有哪些？')
+const cardDefinitions = computed(() => {
+  const transDefinitions = normalizeDefinitionEntries(card.value?.trans, card.value?.primaryPos)
+  if (transDefinitions.length) return transDefinitions
+
+  const fallbackDefinition = normalizeDefinitionText(card.value?.primaryDefinition)
+  if (!fallbackDefinition) return []
+  return [{
+    key: 'primary-definition',
+    pos: normalizeDefinitionText(card.value?.primaryPos),
+    definitions: [fallbackDefinition],
+  }]
+})
 const cardSentences = computed(() => {
   if (!card.value?.sentences) return []
   try {
@@ -114,6 +126,148 @@ const cardSentences = computed(() => {
     return []
   }
 })
+
+const POS_FIELD_NAMES = ['pos', 'partOfSpeech', 'part_of_speech']
+const TEXT_DEFINITION_FIELD_NAMES = ['cn', 'definition', 'definitionZh', 'zh', 'chinese', 'meaning']
+
+function parseJsonLike(value) {
+  if (typeof value !== 'string') return { valid: true, value }
+  const text = value.trim()
+  if (!text) return { valid: true, value: null }
+  if (!text.startsWith('{') && !text.startsWith('[')) return { valid: true, value: text }
+  try {
+    return { valid: true, value: JSON.parse(text) }
+  } catch {
+    return { valid: false, value: null }
+  }
+}
+
+function normalizeDefinitionText(value) {
+  if (value == null || typeof value === 'boolean') return ''
+  return String(value).replace(/\s+/g, ' ').trim()
+}
+
+function readFirstTextField(source, fieldNames) {
+  const field = fieldNames.find((name) => Object.prototype.hasOwnProperty.call(source, name))
+  return field ? normalizeDefinitionText(source[field]) : ''
+}
+
+function uniqueTexts(values) {
+  const seen = new Set()
+  return values.reduce((items, value) => {
+    const text = normalizeDefinitionText(value)
+    if (text && !seen.has(text)) {
+      seen.add(text)
+      items.push(text)
+    }
+    return items
+  }, [])
+}
+
+function isObjectLike(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isNestedDefinitionValue(value) {
+  const parsed = parseJsonLike(value)
+  if (!parsed.valid || parsed.value == null) return false
+  if (Array.isArray(parsed.value)) {
+    return parsed.value.some((item) => isObjectLike(parseJsonLike(item).value))
+  }
+  return isObjectLike(parsed.value)
+}
+
+function definitionTextsFromValue(value) {
+  const parsed = parseJsonLike(value)
+  if (!parsed.valid || parsed.value == null) return []
+
+  if (Array.isArray(parsed.value)) {
+    return uniqueTexts(parsed.value.flatMap((item) => definitionTextsFromValue(item)))
+  }
+
+  if (isObjectLike(parsed.value)) {
+    return uniqueTexts(TEXT_DEFINITION_FIELD_NAMES.flatMap((field) => (
+      Object.prototype.hasOwnProperty.call(parsed.value, field)
+        ? definitionTextsFromValue(parsed.value[field])
+        : []
+    )))
+  }
+
+  return uniqueTexts([parsed.value])
+}
+
+function collectDefinitionRows(value, inheritedPos = '') {
+  const parsed = parseJsonLike(value)
+  if (!parsed.valid || parsed.value == null) return []
+
+  if (Array.isArray(parsed.value)) {
+    return parsed.value.flatMap((item) => collectDefinitionRows(item, inheritedPos))
+  }
+
+  if (!isObjectLike(parsed.value)) {
+    const text = normalizeDefinitionText(parsed.value)
+    return text ? [{ pos: inheritedPos, definitions: [text] }] : []
+  }
+
+  const source = parsed.value
+  const pos = readFirstTextField(source, POS_FIELD_NAMES) || inheritedPos
+  const rows = []
+  const directDefinitions = TEXT_DEFINITION_FIELD_NAMES.flatMap((field) => (
+    Object.prototype.hasOwnProperty.call(source, field)
+      ? definitionTextsFromValue(source[field])
+      : []
+  ))
+
+  if (Object.prototype.hasOwnProperty.call(source, 'definitions')) {
+    directDefinitions.push(...definitionTextsFromValue(source.definitions))
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'trans')) {
+    if (isNestedDefinitionValue(source.trans)) {
+      rows.push(...collectDefinitionRows(source.trans, pos))
+    } else {
+      directDefinitions.push(...definitionTextsFromValue(source.trans))
+    }
+  }
+
+  const definitions = uniqueTexts(directDefinitions)
+  if (definitions.length) {
+    rows.push({ pos, definitions })
+  }
+
+  return rows
+}
+
+function normalizeDefinitionEntries(value, fallbackPos = '') {
+  const rows = collectDefinitionRows(value, normalizeDefinitionText(fallbackPos))
+  const grouped = []
+  const groupIndexes = new Map()
+
+  rows.forEach((row) => {
+    const definitions = uniqueTexts(row.definitions)
+    if (!definitions.length) return
+
+    const pos = normalizeDefinitionText(row.pos)
+    const key = pos || '__without_pos__'
+    let group = groupIndexes.get(key)
+    if (!group) {
+      group = { pos, definitions: [] }
+      groupIndexes.set(key, group)
+      grouped.push(group)
+    }
+
+    definitions.forEach((definition) => {
+      if (!group.definitions.includes(definition)) {
+        group.definitions.push(definition)
+      }
+    })
+  })
+
+  return grouped.map((entry, index) => ({
+    ...entry,
+    key: `definition-${index}-${entry.pos || 'text'}`,
+  }))
+}
 
 function escapeHtml(value = '') {
   return String(value)
@@ -645,9 +799,18 @@ onMounted(loadTask)
         <p class="study-flow-hint">{{ flowHint }}</p>
 
         <template v-if="learningMode">
-          <div class="definition-block revealed">
-            <span>{{ card.primaryPos }}</span>
-            <strong>{{ card.primaryDefinition }}</strong>
+          <div v-if="cardDefinitions.length" class="definition-block revealed">
+            <div
+              v-for="definition in cardDefinitions"
+              :key="definition.key"
+              class="definition-line"
+              :class="{ 'without-pos': !definition.pos }"
+            >
+              <span v-if="definition.pos" class="definition-pos">{{ definition.pos }}</span>
+              <div class="definition-text-list">
+                <strong v-for="text in definition.definitions" :key="text">{{ text }}</strong>
+              </div>
+            </div>
           </div>
           <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
             <p v-html="sentence.highlightedEnglish"></p>
@@ -660,10 +823,6 @@ onMounted(loadTask)
         </template>
 
         <template v-else>
-          <div class="recall-panel">
-            <span>现在回忆中文释义</span>
-            <p>先别看中文，试着根据单词、音标和英文例句说出意思。</p>
-          </div>
           <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
             <p v-html="sentence.highlightedEnglish"></p>
           </div>
@@ -703,7 +862,7 @@ onMounted(loadTask)
       <div class="ai-question-box">
         <div class="ai-question-word">
           <el-tag>{{ card?.word }}</el-tag>
-          <span>{{ card?.primaryDefinition }}</span>
+          <span v-if="learningMode && card?.primaryDefinition">{{ card.primaryDefinition }}</span>
         </div>
         <el-input
           v-model.trim="aiQuestion"

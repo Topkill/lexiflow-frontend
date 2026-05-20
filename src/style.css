@@ -591,43 +591,57 @@ a {
   background: var(--panel-soft);
 }
 
-.definition-block span {
-  display: block;
-  margin-bottom: 8px;
-  color: var(--muted);
+.definition-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.definition-block strong {
-  font-size: 20px;
+.definition-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.definition-line.without-pos {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.definition-pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #eaf1ff;
+  color: var(--primary);
+  font-weight: 760;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.definition-text-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.definition-text-list strong {
+  display: block;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .definition-block.revealed {
   border-left: 4px solid var(--primary);
-}
-
-.recall-panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  min-height: 118px;
-  margin: 0 auto 22px;
-  max-width: 720px;
-  padding: 18px;
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  background: var(--panel-soft);
-  text-align: center;
-}
-
-.recall-panel span {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.recall-panel p {
-  margin: 0;
-  color: var(--muted);
 }
 
 .example-block p {
@@ -1518,9 +1532,27 @@ a {
   }
 
   .definition-block,
-  .example-block,
-  .recall-panel {
+  .example-block {
     padding: 14px;
+  }
+
+  .definition-block {
+    gap: 10px;
+  }
+
+  .definition-line {
+    gap: 8px;
+  }
+
+  .definition-pos {
+    min-width: 36px;
+    min-height: 24px;
+    padding: 2px 7px;
+  }
+
+  .definition-text-list strong {
+    font-size: 16px;
+    line-height: 1.55;
   }
 
   .feedback-row .el-button {
