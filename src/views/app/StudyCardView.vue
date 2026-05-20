@@ -774,7 +774,7 @@ onBeforeUnmount(stopPronunciation)
 </script>
 
 <template>
-  <section>
+  <section class="study-page">
     <PageHeader title="单词学习" :subtitle="pageSubtitle" />
 
     <el-skeleton v-if="loading" :rows="6" animated />
@@ -835,14 +835,15 @@ onBeforeUnmount(stopPronunciation)
               circle
               text
               class="phonetic-audio-button"
-              :loading="pronunciationLoadingType === '1'"
-              :disabled="Boolean(pronunciationLoadingType) || !card.word"
+              :class="{ 'is-playing': pronunciationLoadingType === '1' }"
+              :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '1') || !card.word"
               title="播放英式发音"
+              aria-label="播放英式发音"
               @click="playPronunciation('1')"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
-                <path fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
+              <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
+                <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
               </svg>
             </el-button>
           </span>
@@ -852,14 +853,15 @@ onBeforeUnmount(stopPronunciation)
               circle
               text
               class="phonetic-audio-button"
-              :loading="pronunciationLoadingType === '2'"
-              :disabled="Boolean(pronunciationLoadingType) || !card.word"
+              :class="{ 'is-playing': pronunciationLoadingType === '2' }"
+              :disabled="(Boolean(pronunciationLoadingType) && pronunciationLoadingType !== '2') || !card.word"
               title="播放美式发音"
+              aria-label="播放美式发音"
               @click="playPronunciation('2')"
             >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
-                <path fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
+              <svg class="volume-svg" viewBox="0 0 24 24" aria-hidden="true">
+                <path class="volume-wave" fill="currentColor" d="M16 21c3.527-1.547 5.999-4.909 5.999-9S19.527 4.547 16 3v2c2.387 1.386 3.999 4.047 3.999 7S18.387 17.614 16 19z"></path>
+                <path class="volume-core" fill="currentColor" d="M16 7v10c1.225-1.1 2-3.229 2-5s-.775-3.9-2-5M4 17h2.697l5.748 3.832a1 1 0 0 0 1.027.05A1 1 0 0 0 14 20V4a1 1 0 0 0-1.554-.832L6.697 7H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2m0-8h3c.033 0 .061-.016.093-.019a1 1 0 0 0 .38-.116c.026-.015.057-.017.082-.033L12 5.868v12.264l-4.445-2.964c-.025-.017-.056-.02-.082-.033a1 1 0 0 0-.382-.116C7.059 15.016 7.032 15 7 15H4z"></path>
               </svg>
             </el-button>
           </span>
@@ -877,23 +879,30 @@ onBeforeUnmount(stopPronunciation)
             >
               <span v-if="definition.pos" class="definition-pos">{{ definition.pos }}</span>
               <div class="definition-text-list">
-                <strong v-for="text in definition.definitions" :key="text">{{ text }}</strong>
+                <template v-for="(text, index) in definition.definitions" :key="`${definition.key}-${text}`">
+                  <span class="definition-text">{{ text }}</span>
+                  <span v-if="index < definition.definitions.length - 1" class="definition-separator">/</span>
+                </template>
               </div>
             </div>
           </div>
-          <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
-            <p v-html="sentence.highlightedEnglish"></p>
-            <span>{{ sentence.cn }}</span>
-            <div v-if="sentence.phrase" class="example-phrase">
-              <span>搭配</span>
-              <strong>{{ sentence.phrase }}</strong>
+          <div v-if="cardSentences.length" class="example-list">
+            <div v-for="sentence in cardSentences" :key="sentence.key" class="example-block">
+              <p v-html="sentence.highlightedEnglish"></p>
+              <span>{{ sentence.cn }}</span>
+              <div v-if="sentence.phrase" class="example-phrase">
+                <span>搭配</span>
+                <strong>{{ sentence.phrase }}</strong>
+              </div>
             </div>
           </div>
         </template>
 
         <template v-else>
-          <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
-            <p v-html="sentence.highlightedEnglish"></p>
+          <div v-if="cardSentences.length" class="example-list recall-example-list">
+            <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
+              <p v-html="sentence.highlightedEnglish"></p>
+            </div>
           </div>
         </template>
 
