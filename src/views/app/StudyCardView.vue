@@ -676,9 +676,9 @@ onMounted(loadTask)
           </el-button>
         </div>
         <div v-else class="feedback-row">
-          <el-button size="large" :loading="submitting" :disabled="submitting || generatingCloze" @click="forgetCurrentCard">还是没记住</el-button>
+          <el-button size="large" :loading="submitting" :disabled="submitting || generatingCloze" @click="forgetCurrentCard">不认识</el-button>
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="rememberCurrentCard">
-            {{ generatingCloze ? '正在生成完形填空' : '想起来了' }}
+            {{ generatingCloze ? '正在生成完形填空' : '认识' }}
           </el-button>
         </div>
       </el-card>
