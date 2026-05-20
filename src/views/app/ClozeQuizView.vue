@@ -34,7 +34,6 @@ const sourceOptions = [
   { label: '错词', value: 'WRONG_WORDS' },
 ]
 
-const targetOptions = [5, 6, 7, 8, 9, 10].map((count) => ({ label: `${count} 个词`, value: count }))
 const candidateWords = computed(() => Array.isArray(quiz.value?.candidateWords) ? quiz.value.candidateWords : [])
 const candidateOptions = computed(() => candidateWords.value.map((word, index) => ({
   label: String.fromCharCode(65 + index),
@@ -152,7 +151,7 @@ async function generateQuiz() {
     const task = await createClozeTask({
       dailyTaskId: todayTask.value.taskId,
       sourceType: form.sourceType,
-      targetWordCount: form.sourceType === 'COMPLETED_GROUP' ? 10 : form.targetWordCount,
+      targetWordCount: form.targetWordCount,
     }, { silentError: true })
     const quizId = task.resultId
     if (!quizId) {
@@ -301,7 +300,7 @@ onMounted(async () => {
                 <el-segmented v-model="form.sourceType" :options="sourceOptions" />
               </el-form-item>
               <el-form-item label="目标词数">
-                <el-segmented v-model="form.targetWordCount" :options="targetOptions" :disabled="form.sourceType === 'COMPLETED_GROUP'" />
+                <el-input-number v-model="form.targetWordCount" :min="5" :max="10" :step="1" controls-position="right" />
               </el-form-item>
               <div class="cloze-generate-row">
                 <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
