@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Calendar, ChatLineRound, Cpu, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
+import { Calendar, ChatLineRound, Cpu, Refresh } from '@element-plus/icons-vue'
+import LexiIcon from '../../components/LexiIcon.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
@@ -808,13 +809,14 @@ onBeforeUnmount(stopPronunciation)
           </div>
           <el-button
             circle
-            :icon="card.favorite ? StarFilled : Star"
             :type="card.favorite ? 'warning' : 'default'"
             :loading="favoriteOperating"
             :disabled="favoriteOperating"
             :title="card.favorite ? '取消收藏' : '收藏单词'"
             @click="toggleFavorite"
-          />
+          >
+            <LexiIcon :name="card.favorite ? 'star-filled' : 'star'" />
+          </el-button>
         </div>
 
         <div class="study-flow-meta">

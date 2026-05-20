@@ -1,21 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  Calendar,
-  Collection,
-  Connection,
-  DataAnalysis,
-  Document,
-  House,
-  Reading,
-  Refresh,
-  Setting,
-  Star,
-  SwitchButton,
-  User,
-  Warning,
-} from '@element-plus/icons-vue'
+import { SwitchButton, User } from '@element-plus/icons-vue'
+import LexiIcon from '../components/LexiIcon.vue'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
@@ -23,18 +10,18 @@ const router = useRouter()
 const auth = useAuthStore()
 
 const menuItems = [
-  { path: '/app', label: '今日学习', icon: House },
-  { path: '/app/wordbooks', label: '词库', icon: Collection },
-  { path: '/app/plans', label: '计划', icon: Calendar },
-  { path: '/app/study', label: '学习', icon: Reading },
-  { path: '/app/review', label: '复习', icon: Refresh },
-  { path: '/app/cloze', label: '完形填空', icon: Document },
-  { path: '/app/reports', label: '报告', icon: DataAnalysis },
-  { path: '/app/wrong-words', label: '错词', icon: Warning },
-  { path: '/app/favorites', label: '收藏', icon: Star },
-  { path: '/app/statistics', label: '统计', icon: DataAnalysis },
-  { path: '/app/settings', label: '设置', icon: Setting },
-  { path: '/app/ai-config', label: 'AI 配置', icon: Connection },
+  { path: '/app', label: '今日学习', icon: 'home' },
+  { path: '/app/wordbooks', label: '词库', icon: 'book' },
+  { path: '/app/plans', label: '计划', icon: 'calendar' },
+  { path: '/app/study', label: '学习', icon: 'study' },
+  { path: '/app/review', label: '复习', icon: 'review' },
+  { path: '/app/cloze', label: '完形填空', icon: 'cloze' },
+  { path: '/app/reports', label: '报告', icon: 'report' },
+  { path: '/app/wrong-words', label: '错词', icon: 'warning' },
+  { path: '/app/favorites', label: '收藏', icon: 'star' },
+  { path: '/app/statistics', label: '统计', icon: 'chart' },
+  { path: '/app/settings', label: '设置', icon: 'settings' },
+  { path: '/app/ai-config', label: 'AI 配置', icon: 'ai' },
 ]
 
 const activeMenu = computed(() => {
@@ -61,7 +48,7 @@ async function handleLogout() {
 
       <el-menu :default-active="activeMenu" router class="side-menu">
         <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
+          <LexiIcon :name="item.icon" />
           <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
@@ -95,7 +82,7 @@ async function handleLogout() {
 
       <nav class="mobile-nav">
         <RouterLink v-for="item in menuItems" :key="item.path" :to="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
+          <LexiIcon :name="item.icon" />
           <span>{{ item.label }}</span>
         </RouterLink>
       </nav>
