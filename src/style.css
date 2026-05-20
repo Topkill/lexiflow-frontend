@@ -1835,14 +1835,38 @@ a {
 .admin-filter-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
+.panel-card:has(.admin-filter-row) .el-card__body {
+  padding: 14px 16px 16px;
+}
+
+.admin-filter-row > .el-input {
+  width: 260px;
+  max-width: 100%;
+  flex: 0 1 260px;
+}
+
+.admin-filter-row > .el-select {
+  width: 156px;
+  max-width: 100%;
+  flex: 0 0 156px;
+}
+
+.admin-filter-row > .el-button {
+  height: 32px;
+  margin-left: 0 !important;
+  flex: 0 0 auto;
+}
+
 .filter-grow {
+  width: 320px;
   min-width: 220px;
-  flex: 1 1 240px;
+  max-width: 360px;
+  flex: 0 1 320px;
 }
 
 .pagination-row {
@@ -2108,15 +2132,31 @@ a {
     font-size: 28px;
   }
 
-  .admin-filter-row,
   .report-filter-row {
     gap: 8px;
   }
 
-  .filter-grow,
-  .admin-filter-row .el-input,
-  .admin-filter-row .el-select,
-  .admin-filter-row .el-button,
+  .admin-filter-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .admin-filter-row .filter-grow,
+  .admin-filter-row > .el-input,
+  .admin-filter-row > .el-select,
+  .admin-filter-row > .el-button {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: none;
+  }
+
+  .admin-filter-row > .el-input.filter-grow {
+    grid-column: 1 / -1;
+  }
+
   .report-filter-row .el-date-editor,
   .report-filter-row .button-row,
   .report-filter-row .button-row .el-button {
@@ -2269,5 +2309,13 @@ a {
   .metric-grid,
   .metric-grid.wide {
     grid-template-columns: 1fr;
+  }
+
+  .admin-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-filter-row > .el-input.filter-grow {
+    grid-column: auto;
   }
 }
