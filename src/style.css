@@ -1338,46 +1338,23 @@ a {
 }
 
 .ai-toolbar-button.el-button {
-  border-color: rgba(27, 188, 177, 0.36);
-  background: linear-gradient(135deg, #e0fbf6 0%, #fff1d9 100%);
-  color: #0f8f86;
+  color: #3f4752;
 }
 
 .ai-toolbar-button.el-button:hover {
-  border-color: rgba(27, 188, 177, 0.56);
-  background: linear-gradient(135deg, #c9f6ee 0%, #ffe5ba 100%);
-  color: #0b766f;
+  color: #2f343b;
 }
 
-.ai-toolbar-svg {
-  width: 23px;
-  height: 23px;
-  overflow: visible;
-}
-
-.ai-bubble {
-  fill: rgba(255, 253, 245, 0.78);
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.55;
-}
-
-.ai-letter {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.65;
-}
-
-.ai-spark {
-  fill: #e88b32;
-  transform-origin: 18px 5.6px;
-}
-
-.ai-toolbar-button.el-button:hover .ai-spark {
-  transform: scale(1.12) rotate(8deg);
+.ai-toolbar-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .study-card-scroll {

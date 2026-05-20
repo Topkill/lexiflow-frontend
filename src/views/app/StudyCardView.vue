@@ -809,11 +809,7 @@ onBeforeUnmount(stopPronunciation)
           </div>
           <div class="word-card-actions">
             <el-button class="ai-toolbar-button" circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
-              <svg class="ai-toolbar-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path class="ai-bubble" d="M5.2 6.4c1.4-2 4.4-3 7.2-2.6 3.4.4 6 2.5 6.3 5.3.4 3.3-2.5 6.1-6.3 6.5-1 .1-1.9.1-2.8-.1L5 18.1l1.2-4.2c-1.7-1.6-2.2-4.8-1-7.5Z" />
-                <path class="ai-spark" d="M18.2 3.8l.4 1.4 1.3.4-1.3.5-.4 1.3-.5-1.3-1.3-.5 1.3-.4.5-1.4Z" />
-                <path class="ai-letter" d="M8 13.1 9.7 7l1.8 6.1M8.6 11h2.3M14.3 7.2v5.9M13.4 7.2h1.8M13.4 13.1h1.8" />
-              </svg>
+              <span class="ai-toolbar-label" aria-hidden="true">AI</span>
             </el-button>
             <el-button
               circle
