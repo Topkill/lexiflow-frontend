@@ -643,6 +643,22 @@ a {
   font-weight: 760;
 }
 
+.study-total-progress {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: #667085;
+  font-size: 14px;
+}
+
+.study-total-progress strong {
+  color: #344054;
+  font-size: 18px;
+  font-weight: 760;
+}
+
 .study-page .word-kind-row,
 .study-flow-meta,
 .study-flow-hint,
@@ -1739,21 +1755,13 @@ a {
     padding: 10px 12px;
   }
 
-  .study-page .progress-side .el-progress {
-    margin-bottom: 8px;
-  }
-
-  .study-page .progress-side .task-lines.vertical {
-    flex-direction: row;
-    gap: 6px 10px;
+  .study-page .progress-side .study-total-progress {
+    margin-bottom: 7px;
     font-size: 12px;
-    line-height: 1.4;
   }
 
-  .study-page .progress-side .task-lines.vertical span {
-    min-width: 0;
-    color: #747b88;
-    overflow-wrap: anywhere;
+  .study-page .progress-side .study-total-progress strong {
+    font-size: 15px;
   }
 
   .wordbook-grid {

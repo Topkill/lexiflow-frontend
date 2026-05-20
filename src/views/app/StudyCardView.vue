@@ -57,7 +57,6 @@ const currentItem = computed(() => activeItems.value[activeIndex.value])
 const segmentCount = computed(() => itemBatches.value.length)
 const totalItemCount = computed(() => task.value?.progress?.totalCount ?? task.value?.items?.length ?? 0)
 const completedItemCount = computed(() => task.value?.progress?.doneCount ?? task.value?.doneCount ?? 0)
-const remainingItemCount = computed(() => Math.max(0, totalItemCount.value - completedItemCount.value))
 const studyCompletionRate = computed(() => (
   totalItemCount.value > 0
     ? Math.min(100, Math.round((completedItemCount.value / totalItemCount.value) * 100))
@@ -924,15 +923,11 @@ onBeforeUnmount(stopPronunciation)
       </el-card>
 
       <el-card class="panel-card progress-side" shadow="never">
-        <template #header>第 {{ task?.groupNo || 1 }} 组</template>
-        <el-progress :percentage="studyCompletionRate" />
-        <div class="task-lines vertical">
-          <span>{{ flowTitle }} · {{ phaseTitle }}</span>
-          <span>本轮 {{ cardPositionLabel }}</span>
-          <span>待完成 {{ remainingItemCount }}</span>
-          <span>已完成 {{ completedItemCount }}</span>
-          <span>总计 {{ totalItemCount }}</span>
+        <div class="study-total-progress">
+          <span>总进度 {{ completedItemCount }}/{{ totalItemCount }}</span>
+          <strong>{{ studyCompletionRate }}%</strong>
         </div>
+        <el-progress :percentage="studyCompletionRate" :show-text="false" />
       </el-card>
     </div>
 
