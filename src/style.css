@@ -573,8 +573,22 @@ a {
   font-size: 18px;
 }
 
-.phonetic span {
+.phonetic-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
+}
+
+.phonetic-item .el-button {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  color: var(--muted);
+}
+
+.phonetic-item .el-button:hover {
+  color: var(--primary);
 }
 
 .study-flow-meta {

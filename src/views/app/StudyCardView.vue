@@ -47,7 +47,7 @@ const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiResult = ref(null)
 const aiQuestion = ref('')
-const pronunciationLoading = ref(false)
+const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
@@ -519,34 +519,35 @@ async function loadCard() {
   aiQuestion.value = ''
 }
 
-function pronunciationUrl(word) {
-  return `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`
+function pronunciationUrl(word, type) {
+  return `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=${type}`
 }
 
 function stopPronunciation() {
   if (!pronunciationAudio) return
   pronunciationAudio.pause()
   pronunciationAudio.currentTime = 0
-  pronunciationLoading.value = false
+  pronunciationLoadingType.value = ''
 }
 
-async function playPronunciation() {
+async function playPronunciation(type) {
   const word = card.value?.word?.trim()
-  if (!word || pronunciationLoading.value) return
-  pronunciationLoading.value = true
+  if (!word || pronunciationLoadingType.value) return
+  pronunciationLoadingType.value = type
   try {
     stopPronunciation()
-    pronunciationAudio = new Audio(pronunciationUrl(word))
+    pronunciationLoadingType.value = type
+    pronunciationAudio = new Audio(pronunciationUrl(word, type))
     pronunciationAudio.addEventListener('ended', () => {
-      pronunciationLoading.value = false
+      pronunciationLoadingType.value = ''
     }, { once: true })
     pronunciationAudio.addEventListener('error', () => {
-      pronunciationLoading.value = false
+      pronunciationLoadingType.value = ''
       ElMessage.warning('发音暂时不可用')
     }, { once: true })
     await pronunciationAudio.play()
   } catch {
-    pronunciationLoading.value = false
+    pronunciationLoadingType.value = ''
     ElMessage.warning('发音暂时不可用')
   }
 }
@@ -828,18 +829,32 @@ onBeforeUnmount(stopPronunciation)
 
         <div class="study-word-title">
           <h1>{{ card.word }}</h1>
-          <el-button
-            circle
-            :icon="Headset"
-            :loading="pronunciationLoading"
-            :disabled="pronunciationLoading || !card.word"
-            title="播放发音"
-            @click="playPronunciation"
-          />
         </div>
         <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
-          <span v-if="card.phonetic0">英 {{ card.phonetic0 }}</span>
-          <span v-if="card.phonetic1">美 {{ card.phonetic1 }}</span>
+          <span v-if="card.phonetic0" class="phonetic-item">
+            英 {{ card.phonetic0 }}
+            <el-button
+              circle
+              text
+              :icon="Headset"
+              :loading="pronunciationLoadingType === '1'"
+              :disabled="Boolean(pronunciationLoadingType) || !card.word"
+              title="播放英式发音"
+              @click="playPronunciation('1')"
+            />
+          </span>
+          <span v-if="card.phonetic1" class="phonetic-item">
+            美 {{ card.phonetic1 }}
+            <el-button
+              circle
+              text
+              :icon="Headset"
+              :loading="pronunciationLoadingType === '2'"
+              :disabled="Boolean(pronunciationLoadingType) || !card.word"
+              title="播放美式发音"
+              @click="playPronunciation('2')"
+            />
+          </span>
         </div>
 
         <p class="study-flow-hint">{{ flowHint }}</p>
