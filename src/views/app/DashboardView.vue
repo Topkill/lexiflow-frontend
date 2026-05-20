@@ -52,7 +52,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <section>
+  <section class="dashboard-page">
     <PageHeader title="今日学习" subtitle="按组推进新词、复习和 AI 练习">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
       <el-button type="primary" :icon="Reading" @click="router.push(primaryActionPath)">
