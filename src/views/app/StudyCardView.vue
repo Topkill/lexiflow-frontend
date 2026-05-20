@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Calendar, ChatLineRound, Cpu, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
+import { Calendar, ChatLineRound, Cpu, Headset, Refresh, Star, StarFilled } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
@@ -47,6 +47,8 @@ const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiResult = ref(null)
 const aiQuestion = ref('')
+const pronunciationLoading = ref(false)
+let pronunciationAudio = null
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentSegmentItems = computed(() => itemBatches.value[segmentIndex.value] || [])
@@ -507,6 +509,7 @@ function resetLocalFlow(persist = true) {
 }
 
 async function loadCard() {
+  stopPronunciation()
   if (!currentItem.value) {
     card.value = null
     return
@@ -514,6 +517,38 @@ async function loadCard() {
   card.value = await fetchTaskItemCard(currentItem.value.itemId)
   aiResult.value = null
   aiQuestion.value = ''
+}
+
+function pronunciationUrl(word) {
+  return `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(word)}&type=2`
+}
+
+function stopPronunciation() {
+  if (!pronunciationAudio) return
+  pronunciationAudio.pause()
+  pronunciationAudio.currentTime = 0
+  pronunciationLoading.value = false
+}
+
+async function playPronunciation() {
+  const word = card.value?.word?.trim()
+  if (!word || pronunciationLoading.value) return
+  pronunciationLoading.value = true
+  try {
+    stopPronunciation()
+    pronunciationAudio = new Audio(pronunciationUrl(word))
+    pronunciationAudio.addEventListener('ended', () => {
+      pronunciationLoading.value = false
+    }, { once: true })
+    pronunciationAudio.addEventListener('error', () => {
+      pronunciationLoading.value = false
+      ElMessage.warning('发音暂时不可用')
+    }, { once: true })
+    await pronunciationAudio.play()
+  } catch {
+    pronunciationLoading.value = false
+    ElMessage.warning('发音暂时不可用')
+  }
 }
 
 async function goNextLearnCard() {
@@ -734,6 +769,7 @@ function useFollowUp(question) {
 }
 
 onMounted(loadTask)
+onBeforeUnmount(stopPronunciation)
 </script>
 
 <template>
@@ -790,7 +826,17 @@ onMounted(loadTask)
           <span>{{ cardPositionLabel }}</span>
         </div>
 
-        <h1>{{ card.word }}</h1>
+        <div class="study-word-title">
+          <h1>{{ card.word }}</h1>
+          <el-button
+            circle
+            :icon="Headset"
+            :loading="pronunciationLoading"
+            :disabled="pronunciationLoading || !card.word"
+            title="播放发音"
+            @click="playPronunciation"
+          />
+        </div>
         <div v-if="card.phonetic0 || card.phonetic1" class="phonetic">
           <span v-if="card.phonetic0">英 {{ card.phonetic0 }}</span>
           <span v-if="card.phonetic1">美 {{ card.phonetic1 }}</span>

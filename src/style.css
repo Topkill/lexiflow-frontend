@@ -543,11 +543,23 @@ a {
   min-height: 520px;
 }
 
-.study-word-card h1 {
+.study-word-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   margin-top: 42px;
+}
+
+.study-word-title h1 {
+  margin: 0;
   text-align: center;
   font-size: 54px;
   line-height: 1.05;
+}
+
+.study-word-title .el-button {
+  flex: 0 0 auto;
 }
 
 .phonetic {
