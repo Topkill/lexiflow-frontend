@@ -185,11 +185,13 @@ onMounted(loadData)
           <el-table-column prop="sortOrder" label="排序" width="90" />
           <el-table-column label="操作" width="250">
             <template #default="{ row }">
-              <el-button text :icon="Tickets" @click="router.push(`/admin/words?wordbookId=${row.id}`)">单词</el-button>
-              <el-button text type="primary" :icon="Edit" @click="openEdit(row)">编辑</el-button>
-              <el-button text :type="row.enabled ? 'warning' : 'success'" :loading="changingId === row.id" @click="toggleEnabled(row)">
-                {{ row.enabled ? '停用' : '启用' }}
-              </el-button>
+              <div class="admin-table-actions">
+                <el-button size="small" text :icon="Tickets" @click="router.push(`/admin/words?wordbookId=${row.id}`)">单词</el-button>
+                <el-button size="small" text type="primary" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+                <el-button size="small" plain :type="row.enabled ? 'danger' : 'success'" :loading="changingId === row.id" @click="toggleEnabled(row)">
+                  {{ row.enabled ? '停用' : '启用' }}
+                </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>

@@ -52,6 +52,14 @@ export function updateAdminWord(wordbookId, wordId, payload) {
   return http.put(`/api/v1/admin/wordbooks/${wordbookId}/words/${wordId}`, payload)
 }
 
+export function enableAdminWord(wordbookId, wordId) {
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/words/${wordId}/enable`)
+}
+
+export function disableAdminWord(wordbookId, wordId) {
+  return http.post(`/api/v1/admin/wordbooks/${wordbookId}/words/${wordId}/disable`)
+}
+
 export function removeAdminWord(wordbookId, wordId) {
   return http.delete(`/api/v1/admin/wordbooks/${wordbookId}/words/${wordId}`)
 }

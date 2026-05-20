@@ -121,16 +121,19 @@ onMounted(loadData)
           <el-table-column prop="createdAt" label="注册时间" width="180" />
           <el-table-column label="操作" width="180">
             <template #default="{ row }">
-              <el-button text type="primary" :icon="View" @click="openDetail(row)">详情</el-button>
-              <el-button
-                text
-                :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
-                :loading="changingId === row.id"
-                :disabled="row.role === 'ADMIN'"
-                @click="changeUserStatus(row)"
-              >
-                {{ row.status === 'ACTIVE' ? '禁用' : '启用' }}
-              </el-button>
+              <div class="admin-table-actions">
+                <el-button size="small" text type="primary" :icon="View" @click="openDetail(row)">详情</el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :type="row.status === 'ACTIVE' ? 'danger' : 'success'"
+                  :loading="changingId === row.id"
+                  :disabled="row.role === 'ADMIN'"
+                  @click="changeUserStatus(row)"
+                >
+                  {{ row.status === 'ACTIVE' ? '禁用' : '启用' }}
+                </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>

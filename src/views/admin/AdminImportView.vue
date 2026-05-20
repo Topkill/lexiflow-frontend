@@ -17,7 +17,8 @@ const loadingWordbooks = ref(false)
 const uploading = ref(false)
 const importingJson = ref(false)
 const downloading = ref(false)
-const selectedWordbookId = ref('')
+const excelWordbookId = ref('')
+const jsonWordbookId = ref('')
 const duplicateStrategy = ref('SKIP')
 const jsonDuplicateStrategy = ref('OVERWRITE')
 const jsonSourceUrl = ref('https://files.typewords.cc/dicts/en/word/CET4_T.json')
@@ -47,7 +48,13 @@ async function loadWordbooks() {
   try {
     const result = await fetchAdminWordbooks({ page: 1, size: 100 })
     wordbooks.value = result.records || []
-    selectedWordbookId.value = selectedWordbookId.value || wordbooks.value[0]?.id || ''
+    const defaultWordbookId = wordbooks.value[0]?.id || ''
+    if (!wordbooks.value.some((book) => book.id === excelWordbookId.value)) {
+      excelWordbookId.value = defaultWordbookId
+    }
+    if (!wordbooks.value.some((book) => book.id === jsonWordbookId.value)) {
+      jsonWordbookId.value = defaultWordbookId
+    }
   } finally {
     loadingWordbooks.value = false
   }
@@ -77,7 +84,7 @@ function resetUploadFile() {
 }
 
 async function submitImport() {
-  if (!selectedWordbookId.value) {
+  if (!excelWordbookId.value) {
     ElMessage.warning('请先选择词库')
     return
   }
@@ -87,7 +94,7 @@ async function submitImport() {
   }
   uploading.value = true
   try {
-    importTask.value = await importAdminWords(selectedWordbookId.value, duplicateStrategy.value, selectedFile.value)
+    importTask.value = await importAdminWords(excelWordbookId.value, duplicateStrategy.value, selectedFile.value)
     if (importTask.value.failedRows) {
       ElMessage.warning(`导入完成，${importTask.value.failedRows} 行失败`)
     } else {
@@ -102,7 +109,7 @@ async function submitImport() {
 }
 
 async function submitJsonImport() {
-  if (!selectedWordbookId.value) {
+  if (!jsonWordbookId.value) {
     ElMessage.warning('请先选择词库')
     return
   }
@@ -112,7 +119,7 @@ async function submitJsonImport() {
   }
   importingJson.value = true
   try {
-    importTask.value = await importAdminWordsFromJsonUrl(selectedWordbookId.value, {
+    importTask.value = await importAdminWordsFromJsonUrl(jsonWordbookId.value, {
       sourceUrl: jsonSourceUrl.value.trim(),
       duplicateStrategy: jsonDuplicateStrategy.value,
       replaceWordbook: replaceWordbook.value,
@@ -152,17 +159,17 @@ onMounted(loadWordbooks)
 
 <template>
   <section>
-    <PageHeader title="Excel 导入" subtitle="下载模板、上传词库单词并查看错误报告">
+    <PageHeader title="单词导入" subtitle="支持模板 Excel 上传，也支持从 JSON URL 导入词库单词">
       <el-button :icon="Refresh" @click="loadWordbooks">刷新词库</el-button>
       <el-button :icon="Download" :loading="downloading" @click="downloadTemplate">下载模板</el-button>
     </PageHeader>
 
     <div class="work-grid">
       <el-card class="panel-card" shadow="never">
-        <template #header>上传导入</template>
+        <template #header>Excel 导入</template>
         <el-form label-position="top">
           <el-form-item label="目标词库">
-            <el-select v-model="selectedWordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks">
+            <el-select v-model="excelWordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks">
               <el-option v-for="book in wordbooks" :key="book.id" :label="`${book.name} (${book.wordCount || 0})`" :value="book.id" />
             </el-select>
           </el-form-item>
@@ -193,7 +200,7 @@ onMounted(loadWordbooks)
         <template #header>JSON URL 导入</template>
         <el-form label-position="top">
           <el-form-item label="目标词库">
-            <el-select v-model="selectedWordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks">
+            <el-select v-model="jsonWordbookId" class="full-input" filterable placeholder="选择词库" :loading="loadingWordbooks">
               <el-option v-for="book in wordbooks" :key="book.id" :label="`${book.name} (${book.wordCount || 0})`" :value="book.id" />
             </el-select>
           </el-form-item>

@@ -2,16 +2,25 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CirclePlus, Delete, Edit, Refresh, Search } from '@element-plus/icons-vue'
+import { CirclePlus, Delete, Edit, Open, Refresh, Search, TurnOff } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { createAdminWord, fetchAdminWordbooks, fetchAdminWords, removeAdminWord, updateAdminWord } from '../../api/admin'
+import {
+  createAdminWord,
+  disableAdminWord,
+  enableAdminWord,
+  fetchAdminWordbooks,
+  fetchAdminWords,
+  removeAdminWord,
+  updateAdminWord,
+} from '../../api/admin'
 
 const route = useRoute()
 const loadingWordbooks = ref(false)
 const loadingWords = ref(false)
 const saving = ref(false)
 const removingId = ref('')
+const togglingId = ref('')
 const wordbooks = ref([])
 const selectedWordbookId = ref('')
 const keyword = ref('')
@@ -226,18 +235,34 @@ async function submitForm() {
 }
 
 async function removeWord(row) {
-  await ElMessageBox.confirm(`确定从当前词库移除「${row.word}」吗？`, '移除单词', {
-    confirmButtonText: '移除',
+  await ElMessageBox.confirm(`确定删除「${row.word}」吗？删除后将不再出现在当前词库中。`, '删除单词', {
+    confirmButtonText: '删除',
     cancelButtonText: '取消',
     type: 'warning',
   })
   removingId.value = row.id
   try {
     await removeAdminWord(selectedWordbookId.value, row.id)
-    ElMessage.success('单词已移除')
+    ElMessage.success('单词已删除')
     await loadWords()
   } finally {
     removingId.value = ''
+  }
+}
+
+async function toggleWordEnabled(row) {
+  togglingId.value = row.id
+  try {
+    if (row.enabled) {
+      await disableAdminWord(selectedWordbookId.value, row.id)
+      ElMessage.success('单词已停用')
+    } else {
+      await enableAdminWord(selectedWordbookId.value, row.id)
+      ElMessage.success('单词已启用')
+    }
+    await loadWords()
+  } finally {
+    togglingId.value = ''
   }
 }
 
@@ -281,17 +306,27 @@ onMounted(loadWordbooks)
           <el-table-column label="例句" min-width="260" show-overflow-tooltip>
             <template #default="{ row }">{{ firstSentence(row) }}</template>
           </el-table-column>
-          <el-table-column prop="difficultyLevel" label="难度" width="80" />
-          <el-table-column prop="examFrequency" label="考频" width="80" />
           <el-table-column prop="enabled" label="启用" width="90">
             <template #default="{ row }">
               <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="170">
+          <el-table-column label="操作" width="230">
             <template #default="{ row }">
-              <el-button text :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
-              <el-button text type="danger" :icon="Delete" :loading="removingId === row.id" @click="removeWord(row)">移除</el-button>
+              <div class="admin-table-actions">
+                <el-button size="small" text type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :type="row.enabled ? 'danger' : 'success'"
+                  :icon="row.enabled ? TurnOff : Open"
+                  :loading="togglingId === row.id"
+                  @click="toggleWordEnabled(row)"
+                >
+                  {{ row.enabled ? '停用' : '启用' }}
+                </el-button>
+                <el-button size="small" plain type="danger" :icon="Delete" :loading="removingId === row.id" @click="removeWord(row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -357,14 +392,6 @@ onMounted(loadWordbooks)
         <div class="form-two-col">
           <el-form-item label="词库顺序" prop="sequenceNo">
             <el-input-number v-model="form.sequenceNo" :min="1" />
-          </el-form-item>
-          <el-form-item label="难度" prop="difficultyLevel">
-            <el-input-number v-model="form.difficultyLevel" :min="1" :max="5" />
-          </el-form-item>
-        </div>
-        <div class="form-two-col">
-          <el-form-item label="考频" prop="examFrequency">
-            <el-input-number v-model="form.examFrequency" :min="0" />
           </el-form-item>
           <el-form-item label="启用">
             <el-switch v-model="form.enabled" />

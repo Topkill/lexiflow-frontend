@@ -152,10 +152,12 @@ onMounted(loadData)
             <template #default="{ row }"><el-tag :type="row.editable ? 'success' : 'info'">{{ row.editable ? '是' : '否' }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="description" label="说明" min-width="220" />
-          <el-table-column label="操作" width="150">
+          <el-table-column label="操作" width="170">
             <template #default="{ row }">
-              <el-button text type="primary" :icon="Edit" :disabled="!row.editable" @click="openEdit(row)">编辑</el-button>
-              <el-button text type="danger" :icon="Delete" :loading="deletingId === row.id" :disabled="!row.editable" @click="removeConfig(row)">删除</el-button>
+              <div class="admin-table-actions">
+                <el-button size="small" text type="primary" :icon="Edit" :disabled="!row.editable" @click="openEdit(row)">编辑</el-button>
+                <el-button size="small" plain type="danger" :icon="Delete" :loading="deletingId === row.id" :disabled="!row.editable" @click="removeConfig(row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>

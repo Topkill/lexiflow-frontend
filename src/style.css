@@ -1862,6 +1862,34 @@ a {
   flex: 0 0 auto;
 }
 
+.admin-table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.admin-table-actions .el-button {
+  min-height: 28px;
+  margin-left: 0 !important;
+  padding: 4px 7px;
+  line-height: 1.2;
+}
+
+.admin-table-actions .el-button.is-text {
+  padding: 4px 6px;
+}
+
+.admin-table-actions .el-button.is-plain {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.el-table .admin-table-actions .el-icon {
+  margin-right: 3px;
+}
+
 .filter-grow {
   width: 320px;
   min-width: 220px;

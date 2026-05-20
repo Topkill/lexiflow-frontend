@@ -25,7 +25,7 @@ const adminMenu = [
   { path: '/admin/users', label: '用户管理', icon: User },
   { path: '/admin/wordbooks', label: '词库管理', icon: Collection },
   { path: '/admin/words', label: '单词管理', icon: Tickets },
-  { path: '/admin/imports', label: 'Excel 导入', icon: Upload },
+  { path: '/admin/imports', label: '单词导入', icon: Upload },
   { path: '/admin/ai-configs', label: 'AI 配置', icon: Cpu },
   { path: '/admin/ai-logs', label: 'AI 日志', icon: DataAnalysis },
   { path: '/admin/system-configs', label: '系统配置', icon: Setting },

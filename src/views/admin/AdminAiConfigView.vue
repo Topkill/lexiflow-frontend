@@ -130,7 +130,7 @@ async function activateConfig(row) {
   operatingId.value = row.id
   try {
     await activateAdminAiPublicConfig(row.id)
-    ElMessage.success('公共 AI 配置已激活')
+    ElMessage.success('公共 AI 配置已设为默认')
     await loadData()
   } finally {
     operatingId.value = ''
@@ -200,39 +200,44 @@ onMounted(loadData)
             <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '是' : '否' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="active" label="激活" width="90">
+        <el-table-column prop="active" label="默认" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.active ? 'success' : 'info'">{{ row.active ? '当前' : '否' }}</el-tag>
+            <el-tag :type="row.active ? 'success' : 'info'">{{ row.active ? '默认' : '否' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
-        <el-table-column label="操作" width="280">
+        <el-table-column label="操作" width="300">
           <template #default="{ row }">
-            <el-button text :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
-            <el-button
-              v-if="!row.enabled"
-              text
-              type="primary"
-              :icon="Open"
-              :loading="operatingId === row.id"
-              @click="enableConfig(row)"
-            >启用</el-button>
-            <el-button
-              text
-              type="success"
-              :icon="Check"
-              :disabled="row.active || !row.enabled || !row.keyConfigured"
-              :loading="operatingId === row.id"
-              @click="activateConfig(row)"
-            >激活</el-button>
-            <el-button
-              v-if="row.enabled"
-              text
-              type="danger"
-              :icon="TurnOff"
-              :loading="operatingId === row.id"
-              @click="disableConfig(row)"
-            >停用</el-button>
+            <div class="admin-table-actions">
+              <el-button size="small" text type="primary" :icon="Edit" @click="openEditDialog(row)">编辑</el-button>
+              <el-button
+                v-if="!row.enabled"
+                size="small"
+                plain
+                type="success"
+                :icon="Open"
+                :loading="operatingId === row.id"
+                @click="enableConfig(row)"
+              >启用</el-button>
+              <el-button
+                v-else
+                size="small"
+                plain
+                type="danger"
+                :icon="TurnOff"
+                :loading="operatingId === row.id"
+                @click="disableConfig(row)"
+              >停用</el-button>
+              <el-button
+                size="small"
+                plain
+                type="success"
+                :icon="Check"
+                :disabled="row.active || !row.enabled || !row.keyConfigured"
+                :loading="operatingId === row.id"
+                @click="activateConfig(row)"
+              >设为默认</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
