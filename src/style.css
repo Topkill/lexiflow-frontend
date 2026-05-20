@@ -93,6 +93,23 @@ a {
   color: var(--muted);
 }
 
+.empty-description {
+  max-width: 560px;
+  line-height: 1.7;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.empty-actions .el-button {
+  margin-left: 0 !important;
+}
+
 .brand-mark {
   display: grid;
   place-items: center;
@@ -1400,6 +1417,10 @@ a {
   .empty-description {
     max-width: 100%;
     line-height: 1.6;
+  }
+
+  .empty-actions {
+    margin-top: 14px;
   }
 
   .work-grid,

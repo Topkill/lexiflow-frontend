@@ -8,6 +8,8 @@ defineProps({
 <template>
   <el-empty :description="title">
     <p v-if="description" class="empty-description">{{ description }}</p>
-    <slot />
+    <div v-if="$slots.default" class="empty-actions">
+      <slot />
+    </div>
   </el-empty>
 </template>
