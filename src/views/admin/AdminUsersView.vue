@@ -27,6 +27,10 @@ function statusTagType(status) {
   return status === 'ACTIVE' ? 'success' : 'danger'
 }
 
+function statusText(status) {
+  return status === 'ACTIVE' ? '是' : '否'
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -112,9 +116,9 @@ onMounted(loadData)
               <el-tag :type="row.role === 'ADMIN' ? 'warning' : 'info'">{{ row.role }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="110">
+          <el-table-column prop="status" label="启用" width="110">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="lastLoginAt" label="最近登录" width="180" />
@@ -160,7 +164,7 @@ onMounted(loadData)
           <el-descriptions-item label="昵称">{{ currentUser.nickname }}</el-descriptions-item>
           <el-descriptions-item label="角色">{{ currentUser.role }}</el-descriptions-item>
           <el-descriptions-item label="状态">
-            <el-tag :type="statusTagType(currentUser.status)">{{ currentUser.status }}</el-tag>
+            <el-tag :type="statusTagType(currentUser.status)">{{ statusText(currentUser.status) }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="最近登录">{{ currentUser.lastLoginAt || '-' }}</el-descriptions-item>
           <el-descriptions-item label="最近 IP">{{ currentUser.lastLoginIp || '-' }}</el-descriptions-item>
