@@ -6,7 +6,7 @@ import { fetchUserAiConfig, saveUserAiConfig } from '../../api/user'
 
 const loading = ref(false)
 const saving = ref(false)
-const form = reactive({ apiBaseUrl: '', apiKey: '', modelName: '', temperature: 0.7, enabled: true })
+const form = reactive({ apiBaseUrl: '', apiKey: '', modelName: '', temperature: 0.7, streamEnabled: false, enabled: true })
 const configured = ref(false)
 
 async function loadConfig() {
@@ -14,7 +14,7 @@ async function loadConfig() {
   try {
     const data = await fetchUserAiConfig()
     configured.value = data.configured
-    Object.assign(form, { apiBaseUrl: data.apiBaseUrl || '', modelName: data.modelName || '', temperature: data.temperature || 0.7, enabled: data.enabled ?? true })
+    Object.assign(form, { apiBaseUrl: data.apiBaseUrl || '', modelName: data.modelName || '', temperature: data.temperature || 0.7, streamEnabled: data.streamEnabled ?? false, enabled: data.enabled ?? true })
   } finally {
     loading.value = false
   }
@@ -45,6 +45,14 @@ onMounted(loadConfig)
         <el-form-item label="API Key"><el-input v-model="form.apiKey" type="password" show-password placeholder="保存时加密写入后端" /></el-form-item>
         <el-form-item label="模型名称"><el-input v-model="form.modelName" placeholder="gpt-4.1-mini" /></el-form-item>
         <el-form-item label="温度"><el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
+        <el-form-item label="流式输出">
+          <el-switch
+            v-model="form.streamEnabled"
+            active-text="流式"
+            inactive-text="非流式"
+            inline-prompt
+          />
+        </el-form-item>
         <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
         <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
       </el-form>
