@@ -775,9 +775,7 @@ onBeforeUnmount(stopPronunciation)
 
 <template>
   <section>
-    <PageHeader title="单词学习" :subtitle="pageSubtitle">
-      <el-button :icon="Refresh" :disabled="loading || submitting || generatingCloze" @click="loadTask">刷新</el-button>
-    </PageHeader>
+    <PageHeader title="单词学习" :subtitle="pageSubtitle" />
 
     <el-skeleton v-if="loading" :rows="6" animated />
     <el-card v-else-if="!card && generatingCloze" class="panel-card narrow" shadow="never">
