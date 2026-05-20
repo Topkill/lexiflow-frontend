@@ -735,6 +735,10 @@ a {
   z-index: 1;
 }
 
+body.study-ai-dialog-open .app-main .content-wrap {
+  z-index: 10;
+}
+
 .app-main .content-wrap::before,
 .app-main .content-wrap::after {
   position: fixed;
@@ -1718,10 +1722,22 @@ a {
   flex-wrap: wrap;
 }
 
-.ai-question-word span {
+.ai-question-word {
+  padding-top: 8px;
+}
+
+.ai-question-word > span {
   min-width: 0;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 24px;
+}
+
+.ai-question-word .el-tag {
+  cursor: pointer;
+}
+
+.ai-question-word .el-tag__content {
+  line-height: 1;
 }
 
 @media (min-width: 1081px) {

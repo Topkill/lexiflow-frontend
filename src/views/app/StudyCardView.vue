@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, ChatLineRound, Cpu, Refresh } from '@element-plus/icons-vue'
@@ -22,6 +22,7 @@ const FLOW_SEGMENT = 'segment'
 const FLOW_RETRY = 'retry'
 const PHASE_LEARN = 'learn'
 const PHASE_CONFIRM = 'confirm'
+const AI_DIALOG_BODY_CLASS = 'study-ai-dialog-open'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -48,8 +49,13 @@ const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiResult = ref(null)
 const aiQuestion = ref('')
+const aiQuestionInputRef = ref(null)
 const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
+
+function toggleAiDialogBodyClass(open) {
+  document.body.classList.toggle(AI_DIALOG_BODY_CLASS, open)
+}
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
 const currentSegmentItems = computed(() => itemBatches.value[segmentIndex.value] || [])
@@ -735,6 +741,33 @@ function openAiQuestion() {
   aiDialogVisible.value = true
 }
 
+function getAiQuestionTextarea() {
+  return aiQuestionInputRef.value?.textarea || aiQuestionInputRef.value?.$el?.querySelector('textarea') || null
+}
+
+function insertQuestionText(text) {
+  const insertText = String(text || '').trim()
+  if (!insertText) return
+
+  const textarea = getAiQuestionTextarea()
+  const currentText = textarea?.value ?? aiQuestion.value ?? ''
+  const start = typeof textarea?.selectionStart === 'number' ? textarea.selectionStart : currentText.length
+  const end = typeof textarea?.selectionEnd === 'number' ? textarea.selectionEnd : start
+  const before = currentText.slice(0, start)
+  const after = currentText.slice(end)
+  const leftSpace = before && !/\s$/.test(before) ? ' ' : ''
+  const rightSpace = after && !/^\s/.test(after) ? ' ' : ''
+  const inserted = `${leftSpace}${insertText}${rightSpace}`
+
+  aiQuestion.value = `${before}${inserted}${after}`
+  const cursorPosition = before.length + inserted.length
+  nextTick(() => {
+    const nextTextarea = getAiQuestionTextarea()
+    nextTextarea?.focus()
+    nextTextarea?.setSelectionRange(cursorPosition, cursorPosition)
+  })
+}
+
 async function askAi(regenerate = false) {
   if (!card.value?.wordId || !card.value?.wordbookId || aiLoading.value || aiRegenerating.value) return
   const question = aiQuestion.value.trim()
@@ -769,8 +802,13 @@ function useFollowUp(question) {
   askAi(false)
 }
 
+watch(aiDialogVisible, toggleAiDialogBodyClass)
+
 onMounted(loadTask)
-onBeforeUnmount(stopPronunciation)
+onBeforeUnmount(() => {
+  stopPronunciation()
+  toggleAiDialogBodyClass(false)
+})
 </script>
 
 <template>
@@ -939,10 +977,13 @@ onBeforeUnmount(stopPronunciation)
     <el-dialog v-model="aiDialogVisible" title="AI 单词问答" width="680px">
       <div class="ai-question-box">
         <div class="ai-question-word">
-          <el-tag>{{ card?.word }}</el-tag>
+          <el-tooltip content="点击插入" effect="light" placement="top">
+            <el-tag @click="insertQuestionText(card?.word)">{{ card?.word }}</el-tag>
+          </el-tooltip>
           <span v-if="learningMode && card?.primaryDefinition">{{ card.primaryDefinition }}</span>
         </div>
         <el-input
+          ref="aiQuestionInputRef"
           v-model.trim="aiQuestion"
           type="textarea"
           :rows="3"
@@ -985,9 +1026,7 @@ onBeforeUnmount(stopPronunciation)
           </div>
         </div>
       </template>
-      <EmptyState v-else title="还没有提问" description="输入你对这个单词的疑问，例如反义词、语境差异或易混点。">
-        <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
-      </EmptyState>
+      <EmptyState v-else title="还没有提问" description="输入你对这个单词的疑问，例如反义词、语境差异或易混点。" />
     </el-dialog>
   </section>
 </template>
