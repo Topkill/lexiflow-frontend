@@ -34,6 +34,7 @@ const loading = ref(false)
 const submitting = ref(false)
 const generatingCloze = ref(false)
 const favoriteOperating = ref(false)
+const cardLoading = ref(false)
 const task = ref(null)
 const flowGroups = ref([])
 const flowGroupIndex = ref(0)
@@ -100,6 +101,13 @@ const pageSubtitle = computed(() => {
 const flowTitle = computed(() => `第 ${segmentIndex.value + 1}/${segmentCount.value || 1} 段`)
 const phaseTitle = computed(() => (learningMode.value ? '学习' : '回忆'))
 const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, activeItems.value.length || 1)}/${activeItems.value.length || 0}`)
+const currentItemTypeKey = computed(() => normalizeItemTypeKey(currentFlowGroup.value?.key || currentItem.value?.itemType || card.value?.itemType))
+const currentItemTypeLabel = computed(() => {
+  if (currentItemTypeKey.value === ITEM_TYPE_REVIEW) return '复习'
+  if (currentItemTypeKey.value === ITEM_TYPE_EXTRA) return '额外'
+  return '新词'
+})
+const studyStageLabel = computed(() => (flowMode.value === FLOW_RETRY ? `${currentItemTypeLabel.value}重练` : currentItemTypeLabel.value))
 const learnActionLabel = computed(() => {
   return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
 })
@@ -609,12 +617,18 @@ async function loadCard() {
   stopPronunciation()
   if (!currentItem.value) {
     card.value = null
+    cardLoading.value = false
     return
   }
+  cardLoading.value = true
   card.value = null
-  card.value = await fetchTaskItemCard(currentItem.value.itemId)
-  aiResult.value = null
-  aiQuestion.value = ''
+  try {
+    card.value = await fetchTaskItemCard(currentItem.value.itemId)
+    aiResult.value = null
+    aiQuestion.value = ''
+  } finally {
+    cardLoading.value = false
+  }
 }
 
 function pronunciationUrl(word, type) {
@@ -926,7 +940,7 @@ onBeforeUnmount(() => {
       />
     </el-card>
 
-    <el-card v-else-if="!card" class="panel-card narrow" shadow="never">
+    <el-card v-else-if="!card && !cardLoading" class="panel-card narrow" shadow="never">
       <StarterPanel
         :title="emptyTitle"
         :description="emptyDescription"
@@ -943,8 +957,8 @@ onBeforeUnmount(() => {
       <el-card class="study-word-card" shadow="never">
         <div class="word-kind-row">
           <div class="word-card-meta">
-            <el-tag>{{ card.itemType }}</el-tag>
-            <el-tag type="success" v-if="card.favorite">已收藏</el-tag>
+            <el-tag :type="flowMode === FLOW_RETRY ? 'warning' : undefined">{{ studyStageLabel }}</el-tag>
+            <el-tag type="success" v-if="card?.favorite">已收藏</el-tag>
           </div>
           <div class="study-flow-meta">
             <el-tag effect="plain">{{ flowTitle }}</el-tag>
@@ -952,23 +966,27 @@ onBeforeUnmount(() => {
             <el-tag effect="plain">进度：{{ cardPositionLabel }}</el-tag>
           </div>
           <div class="word-card-actions">
-            <el-button class="ai-toolbar-button" circle title="AI 问答" aria-label="AI 问答" @click="openAiQuestion">
+            <el-button class="ai-toolbar-button" circle title="AI 问答" aria-label="AI 问答" :disabled="cardLoading || !card" @click="openAiQuestion">
               <span class="ai-toolbar-label" aria-hidden="true">AI</span>
             </el-button>
             <el-button
               circle
-              :type="card.favorite ? 'warning' : 'default'"
+              :type="card?.favorite ? 'warning' : 'default'"
               :loading="favoriteOperating"
-              :disabled="favoriteOperating"
-              :title="card.favorite ? '取消收藏' : '收藏单词'"
+              :disabled="favoriteOperating || cardLoading || !card"
+              :title="card?.favorite ? '取消收藏' : '收藏单词'"
               @click="toggleFavorite"
             >
-              <LexiIcon :name="card.favorite ? 'star-filled' : 'star'" />
+              <LexiIcon :name="card?.favorite ? 'star-filled' : 'star'" />
             </el-button>
           </div>
         </div>
 
-        <div class="study-card-scroll">
+        <div v-if="cardLoading || !card" class="study-card-loading">
+          <el-skeleton animated :rows="6" />
+        </div>
+
+        <div v-else class="study-card-scroll">
           <div class="study-word-title">
             <h1>{{ card.word }}</h1>
           </div>
@@ -1051,12 +1069,12 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <div v-if="learningMode" class="feedback-row">
+        <div v-if="learningMode && card" class="feedback-row">
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" :disabled="submitting || generatingCloze" @click="goNextLearnCard">
             {{ learnActionLabel }}
           </el-button>
         </div>
-        <div v-else class="feedback-row">
+        <div v-else-if="card" class="feedback-row">
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="rememberCurrentCard">
             {{ generatingCloze ? '正在生成完形填空' : '认识' }}
           </el-button>

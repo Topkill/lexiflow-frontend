@@ -1385,6 +1385,14 @@ body.study-ai-dialog-open .app-main .content-wrap {
   min-height: 0;
 }
 
+.study-card-loading {
+  width: min(760px, 100%);
+  min-height: 360px;
+  display: flex;
+  align-items: center;
+  margin: 34px auto 0;
+}
+
 .study-page .word-card-meta .el-tag,
 .study-flow-meta .el-tag {
   border-color: transparent;
