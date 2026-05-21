@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, ChatLineRound, Cpu, Refresh } from '@element-plus/icons-vue'
 import LexiIcon from '../../components/LexiIcon.vue'
@@ -9,7 +9,7 @@ import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
-import { fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
+import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 import { useAuthStore } from '../../stores/auth'
 import {
   cleanupExpiredStudyFlowStates,
@@ -29,6 +29,7 @@ const ITEM_TYPE_EXTRA = 'EXTRA'
 const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 const submitting = ref(false)
@@ -58,6 +59,11 @@ const aiQuestion = ref('')
 const aiQuestionInputRef = ref(null)
 const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
+
+const queryTaskId = computed(() => route.query.taskId || '')
+const queryMode = computed(() => route.query.mode || '')
+const isWrongPracticeTask = computed(() => task.value?.taskType === 'WRONG_WORD_PRACTICE' || queryMode.value === 'wrong-practice')
+const completedWrongPractice = computed(() => isWrongPracticeTask.value && task.value?.status === 'DONE')
 
 function toggleAiDialogBodyClass(open) {
   document.body.classList.toggle(AI_DIALOG_BODY_CLASS, open)
@@ -91,8 +97,12 @@ const isLegacyPendingTask = computed(() => {
 })
 const recallMode = computed(() => phase.value === PHASE_CONFIRM)
 const learningMode = computed(() => phase.value === PHASE_LEARN)
+const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词专项复习' : '单词学习'))
 const pageSubtitle = computed(() => {
   const groupLabel = `第 ${task.value?.groupNo || 1} 组`
+  if (isWrongPracticeTask.value) {
+    return `${groupLabel}：只练错词，不影响今日学习进度`
+  }
   if (isLegacyPendingTask.value) {
     return `${groupLabel}：继续未完成学习组，完成后再进入必做完形填空`
   }
@@ -569,11 +579,13 @@ async function loadTask() {
   loading.value = true
   try {
     cleanupExpiredStudyFlowStates()
-    task.value = await fetchTodayTask()
+    task.value = queryTaskId.value ? await fetchStudyTask(queryTaskId.value) : await fetchTodayTask()
     needsPlan.value = false
-    emptyTitle.value = '暂无待学习卡片'
-    emptyDescription.value = '本组完成后可以继续下一组，也可以回到首页查看统计。'
-    if (task.value?.status === 'DONE' && !task.value?.clozeAttempted) {
+    emptyTitle.value = isWrongPracticeTask.value ? '错词专项已完成' : '暂无待学习卡片'
+    emptyDescription.value = isWrongPracticeTask.value
+      ? '本组错词已处理，可以返回错词本或继续下一组。'
+      : '本组完成后可以继续下一组，也可以回到首页查看统计。'
+    if (!isWrongPracticeTask.value && task.value?.status === 'DONE' && !task.value?.clozeAttempted) {
       card.value = null
       clearFlowState()
       const query = task.value.clozeQuizId ? { quizId: task.value.clozeQuizId } : {}
@@ -717,6 +729,10 @@ async function rememberCurrentCard() {
     saveFlowState()
     if (response.dailyTaskDone && task.value?.taskId) {
       clearFlowState()
+      if (isWrongPracticeTask.value) {
+        await loadTask()
+        return
+      }
       await generateCompletedGroupCloze(task.value.taskId)
       return
     }
@@ -810,7 +826,7 @@ function applyFeedbackProgress(response) {
   }
 }
 
-async function generateCompletedGroupCloze(taskId) {
+async function generateCompletedGroupCloze(taskId, extraQuery = {}) {
   if (generatingCloze.value) return
   clearFlowState()
   card.value = null
@@ -821,7 +837,7 @@ async function generateCompletedGroupCloze(taskId) {
       { silentError: true },
     )
     if (task.resultId) {
-      router.push({ path: '/app/cloze', query: { quizId: task.resultId, auto: '1' } })
+      router.push({ path: '/app/cloze', query: { quizId: task.resultId, auto: '1', ...extraQuery } })
     } else {
       await loadTask()
     }
@@ -834,6 +850,28 @@ async function generateCompletedGroupCloze(taskId) {
     router.push({ path: '/app/cloze', query: { generateError: error.code === 40001 ? 'config' : 'ai' } })
   } finally {
     generatingCloze.value = false
+  }
+}
+
+async function generateWrongPracticeCloze() {
+  if (!task.value?.taskId) return
+  await generateCompletedGroupCloze(task.value.taskId, {
+    taskId: task.value.taskId,
+    mode: 'wrong-practice',
+  })
+}
+
+async function continueWrongPractice() {
+  if (loading.value || submitting.value) return
+  try {
+    const nextTask = await createWrongWordPractice({ limit: 10 })
+    if ((nextTask.extraCount || 0) <= 0) {
+      ElMessage.info('暂无可练习的错词')
+      return
+    }
+    router.push({ path: '/app/study', query: { taskId: nextTask.taskId, mode: 'wrong-practice' } })
+  } catch (error) {
+    ElMessage.info(error?.message || '暂无可练习的错词')
   }
 }
 
@@ -923,6 +961,11 @@ function useFollowUp(question) {
 }
 
 watch(aiDialogVisible, toggleAiDialogBodyClass)
+watch(queryTaskId, (nextTaskId, previousTaskId) => {
+  if (String(nextTaskId || '') !== String(previousTaskId || '')) {
+    loadTask()
+  }
+})
 
 onMounted(loadTask)
 onBeforeUnmount(() => {
@@ -933,7 +976,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="study-page">
-    <PageHeader title="单词学习" :subtitle="pageSubtitle" />
+    <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
     <el-skeleton v-if="loading" :rows="6" animated />
     <el-card v-else-if="!card && generatingCloze" class="panel-card narrow" shadow="never">
@@ -951,8 +994,15 @@ onBeforeUnmount(() => {
         :icon="needsPlan ? Calendar : Refresh"
         :error="!needsPlan"
       >
-        <el-button v-if="needsPlan" type="primary" @click="router.push('/app/plans')">创建计划</el-button>
-        <el-button v-if="needsPlan" @click="router.push('/app/wordbooks')">选择词库</el-button>
+        <template v-if="needsPlan">
+          <el-button type="primary" @click="router.push('/app/plans')">创建计划</el-button>
+          <el-button @click="router.push('/app/wordbooks')">选择词库</el-button>
+        </template>
+        <template v-else-if="completedWrongPractice">
+          <el-button type="primary" @click="router.push('/app/wrong-words')">返回错词本</el-button>
+          <el-button @click="continueWrongPractice">继续下一组</el-button>
+          <el-button :loading="generatingCloze" :disabled="generatingCloze" @click="generateWrongPracticeCloze">生成完形填空</el-button>
+        </template>
         <el-button v-else type="primary" @click="loadTask">重试</el-button>
       </StarterPanel>
     </el-card>

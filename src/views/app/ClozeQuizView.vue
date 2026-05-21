@@ -7,7 +7,7 @@ import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import { createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
-import { fetchTodayTask } from '../../api/study'
+import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 
 const router = useRouter()
 const route = useRoute()
@@ -26,13 +26,22 @@ const form = reactive({
   targetWordCount: 10,
 })
 const answers = reactive({})
+const queryTaskId = computed(() => route.query.taskId || '')
+const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
+const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
+const pageSubtitle = computed(() => (isWrongPracticeTask.value ? '基于本组错词生成选词填空，可选完成' : '基于今日新词和错词生成选词填空'))
 
-const sourceOptions = [
-  { label: '本组单词', value: 'COMPLETED_GROUP' },
-  { label: '综合', value: 'MIXED' },
-  { label: '今日新词', value: 'TODAY_NEW' },
-  { label: '错词', value: 'WRONG_WORDS' },
-]
+const sourceOptions = computed(() => {
+  if (isWrongPracticeTask.value) {
+    return [{ label: '本组错词', value: 'COMPLETED_GROUP' }]
+  }
+  return [
+    { label: '本组单词', value: 'COMPLETED_GROUP' },
+    { label: '综合', value: 'MIXED' },
+    { label: '今日新词', value: 'TODAY_NEW' },
+    { label: '错词', value: 'WRONG_WORDS' },
+  ]
+})
 
 const candidateWords = computed(() => Array.isArray(quiz.value?.candidateWords) ? quiz.value.candidateWords : [])
 const candidateOptions = computed(() => candidateWords.value.map((word, index) => ({
@@ -97,7 +106,7 @@ async function loadTodayTask() {
   loadingTask.value = true
   loadError.value = ''
   try {
-    todayTask.value = await fetchTodayTask()
+    todayTask.value = queryTaskId.value ? await fetchStudyTask(queryTaskId.value) : await fetchTodayTask()
     if (!route.query.quizId && todayTask.value?.clozeQuizId && !todayTask.value?.clozeAttempted) {
       await loadQuizById(todayTask.value.clozeQuizId)
       if (route.query.generateError) {
@@ -193,6 +202,20 @@ async function submitAnswers() {
   }
 }
 
+async function continueWrongPractice() {
+  if (generating.value || submitting.value) return
+  try {
+    const task = await createWrongWordPractice({ limit: 10 })
+    if ((task.extraCount || 0) <= 0) {
+      ElMessage.info('暂无可练习的错词')
+      return
+    }
+    router.push({ path: '/app/study', query: { taskId: task.taskId, mode: 'wrong-practice' } })
+  } catch (error) {
+    ElMessage.info(error?.message || '暂无可练习的错词')
+  }
+}
+
 function selectAnswer(blank, word) {
   if (attempt.value) return
   answers[blank.blankId] = word
@@ -265,7 +288,7 @@ onMounted(async () => {
 
 <template>
   <section>
-    <PageHeader title="AI 完形填空" subtitle="基于今日新词和错词生成选词填空">
+    <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
       <el-button :icon="Refresh" :disabled="generating" @click="loadTodayTask">刷新任务</el-button>
     </PageHeader>
 
@@ -420,15 +443,23 @@ onMounted(async () => {
               <el-button :disabled="Boolean(attempt) || !allAnswered || submitting || generating" type="primary" :loading="submitting" @click="submitAnswers">
                 提交答案
               </el-button>
-              <el-button v-if="attempt" type="primary" @click="router.push('/app/study')">继续下一组</el-button>
+              <template v-if="attempt && isWrongPracticeTask">
+                <el-button type="primary" @click="router.push('/app/wrong-words')">返回错词本</el-button>
+                <el-button :loading="generating" :disabled="generating" @click="continueWrongPractice">继续下一组</el-button>
+              </template>
+              <el-button v-else-if="attempt" type="primary" @click="router.push('/app/study')">继续下一组</el-button>
               <el-button v-if="attempt" :loading="generating" :disabled="generating" @click="generateQuiz">再练一组</el-button>
             </div>
           </el-card>
 
           <el-card v-else class="panel-card mt-16" shadow="never">
-            <EmptyState title="还没有练习" :description="generateError || '完成一组单词后，系统会优先用本组错词和复习词生成 10 空完形填空。'">
+            <EmptyState
+              title="还没有练习"
+              :description="generateError || (isWrongPracticeTask ? '可以基于本组错词生成 10 空完形填空。' : '完成一组单词后，系统会优先用本组错词和复习词生成 10 空完形填空。')"
+            >
               <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
-              <el-button :disabled="!canContinueStudy" @click="router.push('/app/study')">
+              <el-button v-if="isWrongPracticeTask" @click="router.push('/app/wrong-words')">返回错词本</el-button>
+              <el-button v-else :disabled="!canContinueStudy" @click="router.push('/app/study')">
                 去背单词
                 <el-icon><ArrowRight /></el-icon>
               </el-button>
