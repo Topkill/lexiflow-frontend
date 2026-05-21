@@ -30,6 +30,16 @@ function normalizeFlowGroupBatchIds(value) {
     .filter((group) => group.key && group.itemBatchIds.some((ids) => ids.length > 0))
 }
 
+function normalizeChoiceState(value) {
+  const state = String(value || 'idle').trim().toLowerCase()
+  return ['idle', 'choosing', 'result'].includes(state) ? state : 'idle'
+}
+
+function normalizeChoiceFeedback(value) {
+  const feedback = String(value || '').trim().toUpperCase()
+  return ['KNOWN', 'UNKNOWN'].includes(feedback) ? feedback : ''
+}
+
 function isExpired(state, now = Date.now()) {
   return !state?.expiresAt || Number(state.expiresAt) <= now
 }
@@ -55,6 +65,11 @@ export function readStudyFlowState(userId, dailyTaskId) {
       nextRetryItemIds: normalizeIdList(state.nextRetryItemIds),
       missedItemIds: normalizeIdList(state.missedItemIds),
       failedFeedbackItemIds: normalizeIdList(state.failedFeedbackItemIds),
+      choiceState: normalizeChoiceState(state.choiceState),
+      choiceItemId: state.choiceItemId == null ? null : String(state.choiceItemId),
+      selectedOptionWordId: state.selectedOptionWordId == null ? null : String(state.selectedOptionWordId),
+      choiceFeedback: normalizeChoiceFeedback(state.choiceFeedback),
+      choiceSubmitted: Boolean(state.choiceSubmitted),
     }
   } catch {
     localStorage.removeItem(key)
@@ -81,6 +96,11 @@ export function writeStudyFlowState(userId, dailyTaskId, payload) {
     nextRetryItemIds: normalizeIdList(payload.nextRetryItemIds),
     missedItemIds: normalizeIdList(payload.missedItemIds),
     failedFeedbackItemIds: normalizeIdList(payload.failedFeedbackItemIds),
+    choiceState: normalizeChoiceState(payload.choiceState),
+    choiceItemId: payload.choiceItemId == null ? null : String(payload.choiceItemId),
+    selectedOptionWordId: payload.selectedOptionWordId == null ? null : String(payload.selectedOptionWordId),
+    choiceFeedback: normalizeChoiceFeedback(payload.choiceFeedback),
+    choiceSubmitted: Boolean(payload.choiceSubmitted),
   }
 
   try {

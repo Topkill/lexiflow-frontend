@@ -22,6 +22,9 @@ const FLOW_SEGMENT = 'segment'
 const FLOW_RETRY = 'retry'
 const PHASE_LEARN = 'learn'
 const PHASE_CONFIRM = 'confirm'
+const CHOICE_IDLE = 'idle'
+const CHOICE_CHOOSING = 'choosing'
+const CHOICE_RESULT = 'result'
 const AI_DIALOG_BODY_CLASS = 'study-ai-dialog-open'
 const ITEM_TYPE_NEW = 'NEW'
 const ITEM_TYPE_REVIEW = 'REVIEW'
@@ -47,6 +50,12 @@ const retryItems = ref([])
 const nextRetryItems = ref([])
 const missedItems = ref([])
 const failedFeedbackItemIds = ref(new Set())
+const choiceState = ref(CHOICE_IDLE)
+const choiceItemId = ref(null)
+const selectedOptionWordId = ref(null)
+const choiceFeedback = ref('')
+const choiceSubmitted = ref(false)
+const choiceDailyTaskDone = ref(false)
 const card = ref(null)
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('本组完成后可以继续下一组，也可以回到首页查看统计。')
@@ -127,6 +136,8 @@ const learnActionLabel = computed(() => {
 })
 const flowHint = computed(() => {
   if (generatingCloze.value) return '本组单词学习已完成，正在生成必做完形填空。'
+  if (!learningMode.value && choiceState.value === CHOICE_CHOOSING) return '选择你想起的中文释义，答完后再进入下一个词。'
+  if (!learningMode.value && choiceState.value === CHOICE_RESULT) return isChoiceCorrect.value ? '验证通过，点下一个继续。' : '正确答案已标出，后面会进入重练。'
   if (flowMode.value === FLOW_RETRY) {
     return learningMode.value
       ? '这些是刚才没记住的词，先看完整信息，再重新回忆。'
@@ -166,6 +177,24 @@ const cardSentences = computed(() => {
     return []
   }
 })
+const choiceQuestion = computed(() => card.value?.choiceQuestion || null)
+const choiceOptions = computed(() => (
+  Array.isArray(choiceQuestion.value?.options) ? choiceQuestion.value.options : []
+))
+const correctChoiceOption = computed(() => {
+  const rawIndex = choiceQuestion.value?.correctIndex
+  if (rawIndex == null || String(rawIndex).trim() === '') return null
+  const index = Number(rawIndex)
+  return Number.isInteger(index) && index >= 0 && index < choiceOptions.value.length
+    ? choiceOptions.value[index]
+    : null
+})
+const hasChoiceQuestion = computed(() => choiceOptions.value.length === 4 && Boolean(correctChoiceOption.value))
+const isChoiceChoosing = computed(() => choiceState.value === CHOICE_CHOOSING)
+const isChoiceResult = computed(() => choiceState.value === CHOICE_RESULT)
+const isChoiceActive = computed(() => isChoiceChoosing.value || isChoiceResult.value)
+const isChoiceCorrect = computed(() => choiceFeedback.value === 'KNOWN')
+const choiceResultText = computed(() => (isChoiceCorrect.value ? '答对了' : '答错了，已加入重练'))
 
 const POS_FIELD_NAMES = ['pos', 'partOfSpeech', 'part_of_speech']
 const TEXT_DEFINITION_FIELD_NAMES = ['cn', 'definition', 'definitionZh', 'zh', 'chinese', 'meaning']
@@ -408,6 +437,41 @@ function markFailedFeedbackSubmitted(itemId) {
   failedFeedbackItemIds.value = new Set([...failedFeedbackItemIds.value, String(itemId)])
 }
 
+function resetChoiceState() {
+  choiceState.value = CHOICE_IDLE
+  choiceItemId.value = null
+  selectedOptionWordId.value = null
+  choiceFeedback.value = ''
+  choiceSubmitted.value = false
+  choiceDailyTaskDone.value = false
+}
+
+function currentItemIdString() {
+  return currentItem.value?.itemId == null ? null : String(currentItem.value.itemId)
+}
+
+function normalizeChoiceStateValue(value) {
+  return [CHOICE_CHOOSING, CHOICE_RESULT].includes(value) ? value : CHOICE_IDLE
+}
+
+function normalizeChoiceFeedbackValue(value) {
+  const feedback = String(value || '').trim().toUpperCase()
+  return ['KNOWN', 'UNKNOWN'].includes(feedback) ? feedback : ''
+}
+
+function isChoiceOptionCorrect(option) {
+  return option?.wordId != null && String(option.wordId) === String(correctChoiceOption.value?.wordId)
+}
+
+function choiceOptionClass(option) {
+  if (!isChoiceResult.value) return ''
+  if (isChoiceOptionCorrect(option)) return 'is-correct'
+  if (selectedOptionWordId.value != null && String(option.wordId) === String(selectedOptionWordId.value)) {
+    return 'is-wrong'
+  }
+  return 'is-muted'
+}
+
 function clampIndex(value, max) {
   const index = Number(value)
   if (!Number.isFinite(index) || index < 0) return 0
@@ -505,6 +569,13 @@ function saveFlowState() {
   }
   const pendingItemMap = createPendingItemMap()
   const currentItemId = currentItem.value?.itemId == null ? null : String(currentItem.value.itemId)
+  const persistChoiceItemId = currentItemId
+    && phase.value === PHASE_CONFIRM
+    && choiceState.value !== CHOICE_IDLE
+    && String(choiceItemId.value) === currentItemId
+    && pendingItemMap.has(currentItemId)
+    ? currentItemId
+    : null
   writeStudyFlowState(auth.user.id, task.value.taskId, {
     planId: getPlanId() == null ? null : String(getPlanId()),
     flowMode: flowMode.value,
@@ -519,12 +590,35 @@ function saveFlowState() {
     nextRetryItemIds: idsFromPendingItems(nextRetryItems.value, pendingItemMap),
     missedItemIds: idsFromPendingItems(missedItems.value, pendingItemMap),
     failedFeedbackItemIds: [...failedFeedbackItemIds.value].filter((itemId) => pendingItemMap.has(String(itemId))),
+    choiceState: persistChoiceItemId ? choiceState.value : CHOICE_IDLE,
+    choiceItemId: persistChoiceItemId,
+    selectedOptionWordId: persistChoiceItemId ? selectedOptionWordId.value : null,
+    choiceFeedback: persistChoiceItemId ? choiceFeedback.value : '',
+    choiceSubmitted: persistChoiceItemId ? choiceSubmitted.value : false,
   })
 }
 
 function clearFlowState() {
   if (!auth.user?.id || !task.value?.taskId) return
   removeStudyFlowState(auth.user.id, task.value.taskId)
+}
+
+function restoreChoiceState(cache) {
+  resetChoiceState()
+  const activeItemId = currentItemIdString()
+  if (!activeItemId || phase.value !== PHASE_CONFIRM || String(cache.choiceItemId || '') !== activeItemId) return
+
+  const restoredChoiceState = normalizeChoiceStateValue(cache.choiceState)
+  if (restoredChoiceState === CHOICE_IDLE) return
+
+  const restoredFeedback = normalizeChoiceFeedbackValue(cache.choiceFeedback)
+  if (restoredChoiceState === CHOICE_RESULT && (!cache.choiceSubmitted || !restoredFeedback)) return
+
+  choiceState.value = restoredChoiceState
+  choiceItemId.value = activeItemId
+  selectedOptionWordId.value = cache.selectedOptionWordId == null ? null : String(cache.selectedOptionWordId)
+  choiceFeedback.value = restoredFeedback
+  choiceSubmitted.value = Boolean(cache.choiceSubmitted)
 }
 
 function restoreLocalFlow() {
@@ -570,6 +664,7 @@ function restoreLocalFlow() {
     activeIndex.value = resolveActiveIndex(currentSegmentItems.value, cache.activeItemId, cache.activeIndex)
   }
 
+  restoreChoiceState(cache)
   saveFlowState()
   return true
 }
@@ -622,6 +717,7 @@ function resetLocalFlow(persist = true) {
   nextRetryItems.value = []
   missedItems.value = []
   failedFeedbackItemIds.value = new Set()
+  resetChoiceState()
   if (!pendingItems.value.length) {
     clearFlowState()
   } else if (persist) {
@@ -634,14 +730,23 @@ async function loadCard() {
   if (!currentItem.value) {
     card.value = null
     cardLoading.value = false
+    resetChoiceState()
     return
   }
+  const loadingItemId = currentItemIdString()
   cardLoading.value = true
   card.value = null
   try {
     card.value = await fetchTaskItemCard(currentItem.value.itemId)
     aiResult.value = null
     aiQuestion.value = ''
+    const canKeepChoiceState = phase.value === PHASE_CONFIRM
+      && choiceState.value !== CHOICE_IDLE
+      && String(choiceItemId.value) === loadingItemId
+      && hasChoiceQuestion.value
+    if (!canKeepChoiceState) {
+      resetChoiceState()
+    }
   } finally {
     cardLoading.value = false
   }
@@ -682,6 +787,7 @@ async function playPronunciation(type) {
 
 async function goNextLearnCard() {
   if (!card.value || submitting.value || generatingCloze.value) return
+  resetChoiceState()
   if (activeIndex.value < activeItems.value.length - 1) {
     activeIndex.value += 1
     saveFlowState()
@@ -703,18 +809,20 @@ async function forgetCurrentCard() {
   } else {
     addUniqueItem(missedItems, item)
   }
+  resetChoiceState()
   saveFlowState()
   await advanceAfterConfirm()
 }
 
 async function submitUnknownOnce(item) {
   const itemId = String(item.itemId)
-  if (failedFeedbackItemIds.value.has(itemId)) return
+  if (failedFeedbackItemIds.value.has(itemId)) return null
   submitting.value = true
   try {
-    await submitTaskFeedback(item.itemId, { feedback: 'UNKNOWN', durationSeconds: 0 })
+    const response = await submitTaskFeedback(item.itemId, { feedback: 'UNKNOWN', durationSeconds: 0 })
     markFailedFeedbackSubmitted(itemId)
     saveFlowState()
+    return response
   } finally {
     submitting.value = false
   }
@@ -722,24 +830,72 @@ async function submitUnknownOnce(item) {
 
 async function rememberCurrentCard() {
   if (!card.value || submitting.value || generatingCloze.value) return
-  submitting.value = true
-  try {
-    const response = await submitTaskFeedback(card.value.itemId, { feedback: 'KNOWN', durationSeconds: 0 })
-    applyFeedbackProgress(response)
+  if (hasChoiceQuestion.value) {
+    choiceState.value = CHOICE_CHOOSING
+    choiceItemId.value = currentItemIdString()
+    selectedOptionWordId.value = null
+    choiceFeedback.value = ''
+    choiceSubmitted.value = false
+    choiceDailyTaskDone.value = false
     saveFlowState()
-    if (response.dailyTaskDone && task.value?.taskId) {
-      clearFlowState()
-      if (isWrongPracticeTask.value) {
-        await loadTask()
-        return
-      }
-      await generateCompletedGroupCloze(task.value.taskId)
+    return
+  }
+  ElMessage.warning('选择题暂不可用，请稍后重试')
+}
+
+async function selectChoiceOption(option) {
+  if (!currentItem.value || !isChoiceChoosing.value || submitting.value || generatingCloze.value) return
+  const item = currentItem.value
+  const selectedWordId = option?.wordId == null ? null : String(option.wordId)
+  if (!selectedWordId) return
+
+  selectedOptionWordId.value = selectedWordId
+  const correct = isChoiceOptionCorrect(option)
+
+  if (correct) {
+    submitting.value = true
+    try {
+      const response = await submitTaskFeedback(item.itemId, { feedback: 'KNOWN', durationSeconds: 0 })
+      applyFeedbackProgress(response)
+      choiceFeedback.value = 'KNOWN'
+      choiceSubmitted.value = true
+      choiceDailyTaskDone.value = Boolean(response.dailyTaskDone)
+      choiceState.value = CHOICE_RESULT
+      saveFlowState()
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
+  await submitUnknownOnce(item)
+  if (flowMode.value === FLOW_RETRY) {
+    addUniqueItem(nextRetryItems, item)
+  } else {
+    addUniqueItem(missedItems, item)
+  }
+  choiceFeedback.value = 'UNKNOWN'
+  choiceSubmitted.value = true
+  choiceDailyTaskDone.value = false
+  choiceState.value = CHOICE_RESULT
+  saveFlowState()
+}
+
+async function advanceAfterChoiceResult() {
+  if (!isChoiceResult.value || submitting.value || generatingCloze.value) return
+  const shouldFinishTask = choiceDailyTaskDone.value || task.value?.status === 'DONE'
+  resetChoiceState()
+  if (shouldFinishTask && task.value?.taskId) {
+    clearFlowState()
+    if (isWrongPracticeTask.value) {
+      await loadTask()
       return
     }
-    await advanceAfterConfirm()
-  } finally {
-    submitting.value = false
+    await generateCompletedGroupCloze(task.value.taskId)
+    return
   }
+  saveFlowState()
+  await advanceAfterConfirm()
 }
 
 async function advanceAfterConfirm() {
@@ -762,6 +918,7 @@ async function finishSegmentRound() {
     segmentIndex.value += 1
     activeIndex.value = 0
     phase.value = PHASE_LEARN
+    resetChoiceState()
     saveFlowState()
     await loadCard()
     return
@@ -781,6 +938,7 @@ async function startRetryRound(items) {
   nextRetryItems.value = []
   activeIndex.value = 0
   phase.value = PHASE_LEARN
+  resetChoiceState()
   saveFlowState()
   await loadCard()
 }
@@ -804,6 +962,7 @@ async function moveToNextFlowGroup() {
     retryItems.value = []
     nextRetryItems.value = []
     missedItems.value = []
+    resetChoiceState()
     saveFlowState()
     await loadCard()
     return
@@ -1115,9 +1274,30 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else>
-            <div v-if="cardSentences.length" class="example-list recall-example-list">
+            <div v-if="!isChoiceActive && cardSentences.length" class="example-list recall-example-list">
               <div v-for="sentence in cardSentences" :key="`recall-${sentence.key}`" class="example-block recall-example">
                 <p v-html="sentence.highlightedEnglish"></p>
+              </div>
+            </div>
+            <div v-if="choiceState !== CHOICE_IDLE && hasChoiceQuestion" class="choice-question-panel">
+              <div class="choice-question-head">
+                <span>选择正确中文释义</span>
+                <strong v-if="isChoiceResult" :class="{ 'is-correct': isChoiceCorrect, 'is-wrong': !isChoiceCorrect }">
+                  {{ choiceResultText }}
+                </strong>
+              </div>
+              <div class="choice-option-list">
+                <button
+                  v-for="option in choiceOptions"
+                  :key="option.wordId"
+                  type="button"
+                  class="choice-option"
+                  :class="choiceOptionClass(option)"
+                  :disabled="submitting || isChoiceResult"
+                  @click="selectChoiceOption(option)"
+                >
+                  <span>{{ option.definition }}</span>
+                </button>
               </div>
             </div>
           </template>
@@ -1129,10 +1309,20 @@ onBeforeUnmount(() => {
           </el-button>
         </div>
         <div v-else-if="card" class="feedback-row">
-          <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="rememberCurrentCard">
-            {{ generatingCloze ? '正在生成完形填空' : '认识' }}
-          </el-button>
-          <el-button size="large" :loading="submitting" :disabled="submitting || generatingCloze" @click="forgetCurrentCard">不认识</el-button>
+          <template v-if="choiceState === CHOICE_IDLE">
+            <el-button size="large" type="primary" :loading="submitting || generatingCloze" @click="rememberCurrentCard">
+              {{ generatingCloze ? '正在生成完形填空' : '认识' }}
+            </el-button>
+            <el-button size="large" :loading="submitting" :disabled="submitting || generatingCloze" @click="forgetCurrentCard">不认识</el-button>
+          </template>
+          <template v-else-if="isChoiceChoosing">
+            <span class="choice-feedback-tip">请选择一个释义</span>
+          </template>
+          <template v-else>
+            <el-button size="large" type="primary" :loading="generatingCloze" :disabled="submitting || generatingCloze" @click="advanceAfterChoiceResult">
+              {{ generatingCloze ? '正在生成完形填空' : '下一个' }}
+            </el-button>
+          </template>
         </div>
       </el-card>
 

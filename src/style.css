@@ -1332,7 +1332,8 @@ body.study-ai-dialog-open .app-main .content-wrap {
 .study-flow-meta,
 .study-flow-hint,
 .definition-block,
-.example-list {
+.example-list,
+.choice-question-panel {
   width: min(760px, 100%);
 }
 
@@ -1660,6 +1661,91 @@ body.study-ai-dialog-open .app-main .content-wrap {
   margin-bottom: 0;
 }
 
+.choice-question-panel {
+  margin: 22px auto 0;
+  padding-top: 18px;
+  border-top: 1px dashed rgba(178, 184, 194, 0.6);
+}
+
+.choice-question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  color: #4d5664;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.choice-question-head strong {
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.choice-question-head strong.is-correct {
+  color: #168a5b;
+}
+
+.choice-question-head strong.is-wrong {
+  color: #c24135;
+}
+
+.choice-option-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice-option {
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1px solid rgba(178, 184, 194, 0.72);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #303640;
+  font: inherit;
+  line-height: 1.55;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.choice-option:hover:not(:disabled) {
+  border-color: rgba(27, 188, 177, 0.72);
+  background: rgba(235, 250, 247, 0.92);
+  transform: translateY(-1px);
+}
+
+.choice-option:disabled {
+  cursor: default;
+}
+
+.choice-option.is-correct {
+  border-color: rgba(22, 138, 91, 0.42);
+  background: rgba(224, 247, 237, 0.86);
+  color: #166345;
+}
+
+.choice-option.is-wrong {
+  border-color: rgba(194, 65, 53, 0.42);
+  background: rgba(255, 232, 229, 0.88);
+  color: #9f3329;
+}
+
+.choice-option.is-muted {
+  opacity: 0.58;
+}
+
+.choice-feedback-tip {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  color: #697386;
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .example-block > span {
   display: block;
   color: #747b88;
@@ -1854,6 +1940,11 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
   .study-page .example-block {
     padding: 14px 0;
+  }
+
+  .study-page .choice-question-panel {
+    margin-top: 16px;
+    padding-top: 14px;
   }
 
   .study-page .feedback-row {
@@ -3371,6 +3462,10 @@ body.study-ai-dialog-open .app-main .content-wrap {
   .example-block p {
     font-size: 16px;
     line-height: 1.72;
+  }
+
+  .choice-option-list {
+    grid-template-columns: 1fr;
   }
 
   .feedback-row .el-button {
