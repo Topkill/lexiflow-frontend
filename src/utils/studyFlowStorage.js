@@ -20,6 +20,16 @@ function normalizeItemBatchIds(value) {
   return value.map((ids) => normalizeIdList(ids))
 }
 
+function normalizeFlowGroupBatchIds(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((group) => ({
+      key: String(group?.key || '').trim().toUpperCase(),
+      itemBatchIds: normalizeItemBatchIds(group?.itemBatchIds),
+    }))
+    .filter((group) => group.key && group.itemBatchIds.some((ids) => ids.length > 0))
+}
+
 function isExpired(state, now = Date.now()) {
   return !state?.expiresAt || Number(state.expiresAt) <= now
 }
@@ -40,6 +50,7 @@ export function readStudyFlowState(userId, dailyTaskId) {
     return {
       ...state,
       itemBatchIds: normalizeItemBatchIds(state.itemBatchIds),
+      flowGroupBatchIds: normalizeFlowGroupBatchIds(state.flowGroupBatchIds),
       retryItemIds: normalizeIdList(state.retryItemIds),
       nextRetryItemIds: normalizeIdList(state.nextRetryItemIds),
       missedItemIds: normalizeIdList(state.missedItemIds),
@@ -61,9 +72,11 @@ export function writeStudyFlowState(userId, dailyTaskId, payload) {
     ...payload,
     dailyTaskId: String(dailyTaskId),
     activeItemId: payload.activeItemId == null ? null : String(payload.activeItemId),
+    flowGroupKey: payload.flowGroupKey == null ? null : String(payload.flowGroupKey),
     updatedAt: now,
     expiresAt: now + TTL_MS,
     itemBatchIds: normalizeItemBatchIds(payload.itemBatchIds),
+    flowGroupBatchIds: normalizeFlowGroupBatchIds(payload.flowGroupBatchIds),
     retryItemIds: normalizeIdList(payload.retryItemIds),
     nextRetryItemIds: normalizeIdList(payload.nextRetryItemIds),
     missedItemIds: normalizeIdList(payload.missedItemIds),

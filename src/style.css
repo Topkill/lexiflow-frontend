@@ -746,7 +746,7 @@ a {
 }
 
 .app-main .content-wrap:has(.study-page) {
-  padding-top: 18px;
+  padding-top: 10px;
   padding-bottom: 14px;
 }
 

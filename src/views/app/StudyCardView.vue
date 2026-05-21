@@ -23,6 +23,10 @@ const FLOW_RETRY = 'retry'
 const PHASE_LEARN = 'learn'
 const PHASE_CONFIRM = 'confirm'
 const AI_DIALOG_BODY_CLASS = 'study-ai-dialog-open'
+const ITEM_TYPE_NEW = 'NEW'
+const ITEM_TYPE_REVIEW = 'REVIEW'
+const ITEM_TYPE_EXTRA = 'EXTRA'
+const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -31,7 +35,8 @@ const submitting = ref(false)
 const generatingCloze = ref(false)
 const favoriteOperating = ref(false)
 const task = ref(null)
-const itemBatches = ref([])
+const flowGroups = ref([])
+const flowGroupIndex = ref(0)
 const segmentIndex = ref(0)
 const activeIndex = ref(0)
 const flowMode = ref(FLOW_SEGMENT)
@@ -58,6 +63,8 @@ function toggleAiDialogBodyClass(open) {
 }
 
 const pendingItems = computed(() => task.value?.items?.filter((item) => item.status === 'PENDING') || [])
+const currentFlowGroup = computed(() => flowGroups.value[flowGroupIndex.value] || null)
+const itemBatches = computed(() => currentFlowGroup.value?.batches || [])
 const currentSegmentItems = computed(() => itemBatches.value[segmentIndex.value] || [])
 const activeItems = computed(() => (flowMode.value === FLOW_RETRY ? retryItems.value : currentSegmentItems.value))
 const currentItem = computed(() => activeItems.value[activeIndex.value])
@@ -334,6 +341,39 @@ function buildItemBatches(items) {
   return batches
 }
 
+function normalizeItemTypeKey(value) {
+  const type = String(value || ITEM_TYPE_NEW).trim().toUpperCase()
+  return type || ITEM_TYPE_NEW
+}
+
+function buildStudyFlowGroups(items) {
+  if (!items.length) return []
+  const groupedItems = new Map()
+  const customOrder = []
+
+  items.forEach((item) => {
+    const key = normalizeItemTypeKey(item.itemType)
+    if (!groupedItems.has(key)) {
+      groupedItems.set(key, [])
+      if (!ITEM_TYPE_FLOW_ORDER.includes(key)) {
+        customOrder.push(key)
+      }
+    }
+    groupedItems.get(key).push(item)
+  })
+
+  const orderedKeys = [
+    ...ITEM_TYPE_FLOW_ORDER.filter((key) => groupedItems.has(key)),
+    ...customOrder,
+  ]
+  return orderedKeys
+    .map((key) => ({
+      key,
+      batches: buildItemBatches(groupedItems.get(key) || []),
+    }))
+    .filter((group) => group.batches.some((batch) => batch.length > 0))
+}
+
 function addUniqueItem(targetRef, item) {
   if (!item || targetRef.value.some((existing) => String(existing.itemId) === String(item.itemId))) return
   targetRef.value = [...targetRef.value, item]
@@ -365,6 +405,15 @@ function idsFromPendingItems(items, itemMap = createPendingItemMap()) {
   return idsFromItems(items).filter((itemId) => itemMap.has(itemId))
 }
 
+function flowGroupBatchIdsFromPendingItems(itemMap = createPendingItemMap()) {
+  return flowGroups.value
+    .map((group) => ({
+      key: group.key,
+      itemBatchIds: group.batches.map((batch) => idsFromPendingItems(batch, itemMap)),
+    }))
+    .filter((group) => group.itemBatchIds.some((ids) => ids.length > 0))
+}
+
 function itemsFromIds(ids, itemMap = createPendingItemMap()) {
   const seen = new Set()
   return (ids || []).reduce((items, id) => {
@@ -377,6 +426,37 @@ function itemsFromIds(ids, itemMap = createPendingItemMap()) {
     }
     return items
   }, [])
+}
+
+function flowGroupsFromCachedBatchIds(cacheGroups, itemMap = createPendingItemMap()) {
+  if (!Array.isArray(cacheGroups)) return []
+  return cacheGroups
+    .map((group) => {
+      const batches = Array.isArray(group?.itemBatchIds)
+        ? group.itemBatchIds.map((ids) => itemsFromIds(ids, itemMap)).filter((batch) => batch.length > 0)
+        : []
+      return {
+        key: normalizeItemTypeKey(group?.key),
+        batches,
+      }
+    })
+    .filter((group) => group.batches.length > 0)
+}
+
+function firstAvailableFlowGroupIndex(groups, preferredIndex) {
+  if (!groups.length) return -1
+  const normalizedIndex = clampIndex(preferredIndex, groups.length - 1)
+  const forwardIndex = groups.findIndex((group, index) => index >= normalizedIndex && group.batches.some((batch) => batch.length > 0))
+  if (forwardIndex >= 0) return forwardIndex
+  return groups.findIndex((group) => group.batches.some((batch) => batch.length > 0))
+}
+
+function resolveFlowGroupIndex(groups, cache) {
+  if (!groups.length) return -1
+  const cachedKey = cache?.flowGroupKey ? normalizeItemTypeKey(cache.flowGroupKey) : ''
+  const keyIndex = cachedKey ? groups.findIndex((group) => group.key === cachedKey) : -1
+  if (keyIndex >= 0) return keyIndex
+  return firstAvailableFlowGroupIndex(groups, cache?.flowGroupIndex ?? 0)
 }
 
 function firstAvailableBatchIndex(batches, preferredIndex) {
@@ -404,10 +484,12 @@ function saveFlowState() {
     planId: getPlanId() == null ? null : String(getPlanId()),
     flowMode: flowMode.value,
     phase: phase.value,
+    flowGroupIndex: flowGroupIndex.value,
+    flowGroupKey: currentFlowGroup.value?.key || null,
     segmentIndex: segmentIndex.value,
     activeIndex: activeIndex.value,
     activeItemId: currentItemId && pendingItemMap.has(currentItemId) ? currentItemId : null,
-    itemBatchIds: itemBatches.value.map((batch) => idsFromPendingItems(batch, pendingItemMap)),
+    flowGroupBatchIds: flowGroupBatchIdsFromPendingItems(pendingItemMap),
     retryItemIds: idsFromPendingItems(retryItems.value, pendingItemMap),
     nextRetryItemIds: idsFromPendingItems(nextRetryItems.value, pendingItemMap),
     missedItemIds: idsFromPendingItems(missedItems.value, pendingItemMap),
@@ -426,17 +508,20 @@ function restoreLocalFlow() {
   if (!cache || !pendingItems.value.length) return false
 
   const pendingItemMap = createPendingItemMap()
-  const cachedBatches = Array.isArray(cache.itemBatchIds)
-    ? cache.itemBatchIds.map((ids) => itemsFromIds(ids, pendingItemMap))
-    : []
-  const restoredBatches = cachedBatches.some((batch) => batch.length > 0)
-    ? cachedBatches
-    : buildItemBatches(pendingItems.value)
+  if (!Array.isArray(cache.flowGroupBatchIds) || !cache.flowGroupBatchIds.length) return false
+
+  const cachedFlowGroups = flowGroupsFromCachedBatchIds(cache.flowGroupBatchIds, pendingItemMap)
+  const restoredFlowGroups = cachedFlowGroups.length
+    ? cachedFlowGroups
+    : buildStudyFlowGroups(pendingItems.value)
   const restoredFlowMode = cache.flowMode === FLOW_RETRY ? FLOW_RETRY : FLOW_SEGMENT
   const restoredPhase = cache.phase === PHASE_CONFIRM ? PHASE_CONFIRM : PHASE_LEARN
   const restoredRetryItems = itemsFromIds(cache.retryItemIds, pendingItemMap)
+  const restoredFlowGroupIndex = resolveFlowGroupIndex(restoredFlowGroups, cache)
+  if (restoredFlowGroupIndex < 0) return false
 
-  itemBatches.value = restoredBatches
+  flowGroups.value = restoredFlowGroups
+  flowGroupIndex.value = restoredFlowGroupIndex
   flowMode.value = restoredFlowMode
   phase.value = restoredPhase
   retryItems.value = restoredRetryItems
@@ -498,8 +583,11 @@ async function loadTask() {
 }
 
 function resetLocalFlow(persist = true) {
-  itemBatches.value = buildItemBatches(pendingItems.value)
-  segmentIndex.value = 0
+  flowGroups.value = buildStudyFlowGroups(pendingItems.value)
+  const firstGroupIndex = firstAvailableFlowGroupIndex(flowGroups.value, 0)
+  flowGroupIndex.value = firstGroupIndex >= 0 ? firstGroupIndex : 0
+  const firstSegmentIndex = firstGroupIndex >= 0 ? firstAvailableBatchIndex(itemBatches.value, 0) : -1
+  segmentIndex.value = firstSegmentIndex >= 0 ? firstSegmentIndex : 0
   activeIndex.value = 0
   flowMode.value = FLOW_SEGMENT
   phase.value = PHASE_LEARN
@@ -520,6 +608,7 @@ async function loadCard() {
     card.value = null
     return
   }
+  card.value = null
   card.value = await fetchTaskItemCard(currentItem.value.itemId)
   aiResult.value = null
   aiQuestion.value = ''
@@ -654,7 +743,7 @@ async function finishSegmentRound() {
     await startRetryRound(items)
     return
   }
-  await loadTask()
+  await moveToNextFlowGroup()
 }
 
 async function startRetryRound(items) {
@@ -670,6 +759,24 @@ async function startRetryRound(items) {
 async function finishRetryRound() {
   if (nextRetryItems.value.length > 0) {
     await startRetryRound(nextRetryItems.value)
+    return
+  }
+  await moveToNextFlowGroup()
+}
+
+async function moveToNextFlowGroup() {
+  const nextGroupIndex = firstAvailableFlowGroupIndex(flowGroups.value, flowGroupIndex.value + 1)
+  if (nextGroupIndex >= 0 && nextGroupIndex !== flowGroupIndex.value) {
+    flowGroupIndex.value = nextGroupIndex
+    segmentIndex.value = firstAvailableBatchIndex(itemBatches.value, 0)
+    activeIndex.value = 0
+    flowMode.value = FLOW_SEGMENT
+    phase.value = PHASE_LEARN
+    retryItems.value = []
+    nextRetryItems.value = []
+    missedItems.value = []
+    saveFlowState()
+    await loadCard()
     return
   }
   await loadTask()
