@@ -101,12 +101,15 @@ const flowTitle = computed(() => `第 ${segmentIndex.value + 1}/${segmentCount.v
 const phaseTitle = computed(() => (learningMode.value ? '学习' : '回忆'))
 const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, activeItems.value.length || 1)}/${activeItems.value.length || 0}`)
 const learnActionLabel = computed(() => {
-  if (flowMode.value === FLOW_RETRY) return '我再回忆一次'
   return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
 })
 const flowHint = computed(() => {
   if (generatingCloze.value) return '本组单词学习已完成，正在生成必做完形填空。'
-  if (flowMode.value === FLOW_RETRY) return '这些是刚才没记住的词，先看完整信息，再重新回忆。'
+  if (flowMode.value === FLOW_RETRY) {
+    return learningMode.value
+      ? '这些是刚才没记住的词，先看完整信息，再重新回忆。'
+      : '现在重新回忆这些词，确认是否已经想起中文意思。'
+  }
   return learningMode.value ? '先快速理解本段单词，随后会折叠中文释义做轻量回忆。' : '现在只看英文信息，确认自己能不能想起中文意思。'
 })
 const aiQuestionPlaceholder = computed(() => card.value?.word ? `例如：${card.value.word} 的反义词有哪些？` : '例如：这个词的反义词有哪些？')
@@ -649,11 +652,6 @@ async function playPronunciation(type) {
 
 async function goNextLearnCard() {
   if (!card.value || submitting.value || generatingCloze.value) return
-  if (flowMode.value === FLOW_RETRY) {
-    phase.value = PHASE_CONFIRM
-    saveFlowState()
-    return
-  }
   if (activeIndex.value < activeItems.value.length - 1) {
     activeIndex.value += 1
     saveFlowState()
@@ -713,9 +711,6 @@ async function rememberCurrentCard() {
 async function advanceAfterConfirm() {
   if (activeIndex.value < activeItems.value.length - 1) {
     activeIndex.value += 1
-    if (flowMode.value === FLOW_RETRY) {
-      phase.value = PHASE_LEARN
-    }
     saveFlowState()
     await loadCard()
     return
