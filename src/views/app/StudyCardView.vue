@@ -104,10 +104,14 @@ const cardPositionLabel = computed(() => `${Math.min(activeIndex.value + 1, acti
 const currentItemTypeKey = computed(() => normalizeItemTypeKey(currentFlowGroup.value?.key || currentItem.value?.itemType || card.value?.itemType))
 const currentItemTypeLabel = computed(() => {
   if (currentItemTypeKey.value === ITEM_TYPE_REVIEW) return '复习'
-  if (currentItemTypeKey.value === ITEM_TYPE_EXTRA) return '额外'
+  if (currentItemTypeKey.value === ITEM_TYPE_EXTRA) return '错词'
   return '新词'
 })
-const studyStageLabel = computed(() => (flowMode.value === FLOW_RETRY ? `${currentItemTypeLabel.value}重练` : currentItemTypeLabel.value))
+const studyStageLabel = computed(() => {
+  const label = currentItemTypeLabel.value
+  if (flowMode.value !== FLOW_RETRY) return currentItemTypeKey.value === ITEM_TYPE_EXTRA ? '错词重练' : label
+  return label.endsWith('重练') ? label : `${label}重练`
+})
 const learnActionLabel = computed(() => {
   return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
 })

@@ -94,7 +94,7 @@ onMounted(loadData)
             <div class="task-lines">
               <span>新词 {{ task.newCount }}</span>
               <span>复习 {{ task.reviewCount }}</span>
-              <span>额外 {{ task.extraCount }}</span>
+              <span>错词重练 {{ task.extraCount }}</span>
             </div>
             <el-button type="primary" @click="router.push(taskActionPath())">
               {{ taskActionLabel() }}
