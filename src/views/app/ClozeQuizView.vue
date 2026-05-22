@@ -836,7 +836,6 @@ onBeforeUnmount(() => {
                 <el-button :loading="generating" :disabled="generating" @click="continueWrongPractice">继续下一组</el-button>
               </template>
               <el-button v-else-if="attempt" type="primary" @click="router.push('/app/study')">继续下一组</el-button>
-              <el-button v-if="attempt" :loading="generating" :disabled="generating" @click="generateQuiz">再练一组</el-button>
             </div>
           </el-card>
 
