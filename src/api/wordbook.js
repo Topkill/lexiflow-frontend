@@ -11,3 +11,10 @@ export function fetchWordbookDetail(wordbookId) {
 export function fetchWordbookWords(wordbookId, params = {}) {
   return http.get(`/api/v1/wordbooks/${wordbookId}/words`, { params })
 }
+
+export function lookupWordInWordbook(wordbookId, text) {
+  return http.get(`/api/v1/wordbooks/${wordbookId}/words/lookup`, {
+    params: { text },
+    silentError: true,
+  })
+}

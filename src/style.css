@@ -2394,6 +2394,16 @@ body.study-ai-dialog-open .app-main .content-wrap {
   cursor: default;
 }
 
+.cloze-option.locked {
+  cursor: default;
+}
+
+.cloze-option.locked:hover {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
 .cloze-option span {
   display: inline-flex;
   align-items: center;
@@ -2448,6 +2458,10 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-inline-blank:disabled {
+  cursor: default;
+}
+
+.cloze-inline-blank.locked {
   cursor: default;
 }
 
@@ -2517,10 +2531,112 @@ body.study-ai-dialog-open .app-main .content-wrap {
   cursor: default;
 }
 
+.cloze-answer-pill.locked {
+  cursor: default;
+}
+
 .cloze-active-line {
   justify-content: space-between;
   margin-top: 12px;
   color: var(--muted);
+}
+
+.cloze-lookup-float {
+  position: fixed;
+  z-index: 1500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(75, 85, 99, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
+  cursor: pointer;
+}
+
+.cloze-lookup-float:hover {
+  border-color: rgba(75, 85, 99, 0.32);
+  background: #f8fafc;
+}
+
+.cloze-lookup-dialog .el-dialog {
+  border-radius: 8px;
+}
+
+.cloze-lookup-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cloze-lookup-header strong {
+  color: var(--text);
+  font-size: 22px;
+}
+
+.cloze-lookup-header span,
+.cloze-lookup-muted {
+  color: var(--muted);
+}
+
+.cloze-lookup-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cloze-lookup-phonetics {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cloze-lookup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cloze-lookup-definition,
+.cloze-lookup-sentence {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.cloze-lookup-definition {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.cloze-lookup-definition span {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-weight: 750;
+}
+
+.cloze-lookup-definition p,
+.cloze-lookup-sentence p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.cloze-lookup-sentence span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .cloze-active-line .el-button {
@@ -2987,6 +3103,12 @@ body.study-ai-dialog-open .app-main .content-wrap {
   border-color: rgba(27, 188, 177, 0.48);
   background: var(--app-primary-soft);
   color: #126f68;
+}
+
+.app-shell .cloze-option.locked:hover {
+  border-color: rgba(89, 197, 179, 0.22);
+  background: rgba(255, 253, 245, 0.9);
+  color: var(--app-text);
 }
 
 .app-shell .cloze-option.used:not(.selected),

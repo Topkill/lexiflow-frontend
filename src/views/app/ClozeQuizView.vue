@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Calendar, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import { createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
+import { lookupWordInWordbook } from '../../api/wordbook'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,6 +22,17 @@ const needsPlan = ref(false)
 const loadError = ref('')
 const generateError = ref('')
 const startedAt = ref(null)
+const lookupVisible = ref(false)
+const lookupWord = ref('')
+const lookupLoading = ref(false)
+const lookupResult = ref(null)
+const lookupError = ref('')
+const lookupSelectionVisible = ref(false)
+const lookupSelectionText = ref('')
+const lookupSelectionStyle = ref({ top: '0px', left: '0px' })
+const passageRef = ref(null)
+let clozeClickTimer = null
+let lookupSelectionRaf = null
 const form = reactive({
   sourceType: 'COMPLETED_GROUP',
   targetWordCount: 10,
@@ -96,6 +108,16 @@ const wrongAnswerMap = computed(() => {
   ;(attempt.value?.answers || []).forEach((answer) => map.set(String(answer.blankId), answer))
   return map
 })
+const lookupDefinitions = computed(() => {
+  if (!lookupResult.value) return []
+  const fromTrans = normalizeLookupDefinitions(lookupResult.value.trans, lookupResult.value.primaryPos)
+  if (fromTrans.length) return fromTrans
+  const fallback = normalizeLookupText(lookupResult.value.primaryDefinition)
+  return fallback
+    ? [{ key: 'primary-definition', pos: normalizeLookupText(lookupResult.value.primaryPos), definitions: [fallback] }]
+    : []
+})
+const lookupSentences = computed(() => normalizeLookupSentences(lookupResult.value?.sentences).slice(0, 2))
 
 function blankAnswer(blankId) {
   return wrongAnswerMap.value.get(String(blankId))
@@ -131,6 +153,7 @@ function resetQuizState() {
   quiz.value = null
   attempt.value = null
   selectedBlankId.value = null
+  closeLookup()
   Object.keys(answers).forEach((key) => delete answers[key])
 }
 
@@ -230,6 +253,38 @@ function selectActiveAnswer(option) {
   selectAnswer(blank, option.word)
 }
 
+function scheduleClozeClick(handler) {
+  clearClozeClickTimer()
+  clozeClickTimer = window.setTimeout(() => {
+    clozeClickTimer = null
+    handler()
+  }, 180)
+}
+
+function clearClozeClickTimer() {
+  if (!clozeClickTimer) return
+  window.clearTimeout(clozeClickTimer)
+  clozeClickTimer = null
+}
+
+function handleOptionClick(option) {
+  scheduleClozeClick(() => selectActiveAnswer(option))
+}
+
+function handleOptionDoubleClick(option) {
+  clearClozeClickTimer()
+  lookupByRawWord(option?.word)
+}
+
+function handleBlankClick(blank) {
+  scheduleClozeClick(() => setActiveBlank(blank))
+}
+
+function handleBlankDoubleClick(blank) {
+  clearClozeClickTimer()
+  lookupByRawWord(answers[blank.blankId])
+}
+
 function clearAnswer(blank) {
   if (attempt.value) return
   delete answers[blank.blankId]
@@ -277,12 +332,198 @@ function answerOptionLabel(word) {
   return option ? `${option.label}. ${word}` : word
 }
 
+function handlePassageSelectionChange() {
+  scheduleLookupSelectionUpdate()
+}
+
+function scheduleLookupSelectionUpdate() {
+  if (lookupSelectionRaf) {
+    window.cancelAnimationFrame(lookupSelectionRaf)
+  }
+  lookupSelectionRaf = window.requestAnimationFrame(() => {
+    lookupSelectionRaf = null
+    updateLookupSelection()
+  })
+}
+
+function updateLookupSelection() {
+  const passage = passageRef.value
+  const selection = window.getSelection?.()
+  if (!passage || !selection || selection.isCollapsed || !selection.rangeCount) {
+    hideLookupSelection()
+    return
+  }
+
+  const range = selection.getRangeAt(0)
+  const commonAncestor = range.commonAncestorContainer?.nodeType === 3
+    ? range.commonAncestorContainer.parentElement
+    : range.commonAncestorContainer
+  if (!commonAncestor || !passage.contains(commonAncestor)) {
+    hideLookupSelection()
+    return
+  }
+
+  const text = normalizeLookupSelectionText(selection.toString())
+  if (!text) {
+    hideLookupSelection()
+    return
+  }
+
+  const rect = range.getBoundingClientRect()
+  if (!rect || (!rect.width && !rect.height)) {
+    hideLookupSelection()
+    return
+  }
+
+  lookupSelectionText.value = text
+  lookupSelectionStyle.value = buildLookupSelectionStyle(rect)
+  lookupSelectionVisible.value = true
+}
+
+function buildLookupSelectionStyle(rect) {
+  const buttonWidth = 78
+  const buttonHeight = 34
+  const padding = 8
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720
+  let left = rect.left + rect.width / 2 - buttonWidth / 2
+  left = Math.max(padding, Math.min(left, viewportWidth - buttonWidth - padding))
+  let top = rect.top - buttonHeight - 8
+  if (top < padding) {
+    top = rect.bottom + 8
+  }
+  top = Math.max(padding, Math.min(top, viewportHeight - buttonHeight - padding))
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+  }
+}
+
+function normalizeLookupSelectionText(value) {
+  if (!value) return ''
+  return String(value).replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+function hideLookupSelection() {
+  lookupSelectionVisible.value = false
+  lookupSelectionText.value = ''
+}
+
+function handleLookupSelectionLookup() {
+  if (!lookupSelectionText.value) return
+  lookupByRawWord(lookupSelectionText.value)
+}
+
+function cleanLookupText(value) {
+  if (!value) return ''
+  return normalizeLookupSelectionText(value)
+}
+
+async function lookupByRawWord(rawWord) {
+  const word = cleanLookupText(rawWord)
+  if (!word) return
+  if (!quiz.value?.wordbookId) {
+    ElMessage.warning('当前练习缺少词库信息，暂时无法查词')
+    return
+  }
+  lookupVisible.value = true
+  lookupWord.value = word
+  lookupResult.value = null
+  lookupError.value = ''
+  lookupLoading.value = true
+  try {
+    lookupResult.value = await lookupWordInWordbook(quiz.value.wordbookId, word)
+    lookupError.value = lookupResult.value ? '' : '未找到该单词或词组'
+  } catch (error) {
+    lookupError.value = error?.code === 20002 || error?.code === 10002 || error?.code === 404
+      ? '未找到该单词或词组'
+      : (error?.message || '查词失败，请稍后重试')
+  } finally {
+    lookupLoading.value = false
+  }
+}
+
+function closeLookup() {
+  lookupVisible.value = false
+  lookupWord.value = ''
+  lookupResult.value = null
+  lookupError.value = ''
+  lookupLoading.value = false
+}
+
+function parseLookupJson(value) {
+  if (typeof value !== 'string') return value
+  const text = value.trim()
+  if (!text) return null
+  if (!text.startsWith('{') && !text.startsWith('[')) return text
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+function normalizeLookupText(value) {
+  if (value == null || typeof value === 'boolean') return ''
+  return String(value).replace(/\s+/g, ' ').trim()
+}
+
+function normalizeLookupDefinitions(value, inheritedPos = '') {
+  const parsed = parseLookupJson(value)
+  if (!Array.isArray(parsed)) return []
+  return parsed.map((item, index) => {
+    if (typeof item === 'string') {
+      return { key: `definition-${index}`, pos: normalizeLookupText(inheritedPos), definitions: [normalizeLookupText(item)] }
+    }
+    if (!item || typeof item !== 'object') return null
+    const pos = normalizeLookupText(item.pos || item.partOfSpeech || item.part_of_speech || inheritedPos)
+    const definitions = []
+    ;['cn', 'definition', 'definitionZh', 'zh', 'chinese', 'meaning'].forEach((field) => {
+      const text = normalizeLookupText(item[field])
+      if (text) definitions.push(text)
+    })
+    if (Array.isArray(item.definitions)) {
+      item.definitions.map(normalizeLookupText).filter(Boolean).forEach((text) => definitions.push(text))
+    }
+    const uniqueDefinitions = [...new Set(definitions)]
+    return uniqueDefinitions.length ? { key: `definition-${index}-${pos || 'text'}`, pos, definitions: uniqueDefinitions } : null
+  }).filter(Boolean)
+}
+
+function normalizeLookupSentences(value) {
+  const parsed = parseLookupJson(value)
+  if (!Array.isArray(parsed)) return []
+  return parsed.map((sentence, index) => {
+    if (typeof sentence === 'string') {
+      return { key: `sentence-${index}`, english: normalizeLookupText(sentence), chinese: '' }
+    }
+    if (!sentence || typeof sentence !== 'object') return null
+    const english = normalizeLookupText(sentence.c || sentence.en || sentence.english || sentence.sentence)
+    const chinese = normalizeLookupText(sentence.cn || sentence.zh || sentence.chinese || sentence.translation)
+    return english ? { key: `sentence-${index}-${english}`, english, chinese } : null
+  }).filter(Boolean)
+}
+
 onMounted(async () => {
   await loadTodayTask()
   applyRouteGenerateError()
   if (route.query.quizId) {
     await loadQuizById(route.query.quizId)
   }
+  document.addEventListener('selectionchange', handlePassageSelectionChange)
+  window.addEventListener('scroll', scheduleLookupSelectionUpdate, true)
+  window.addEventListener('resize', scheduleLookupSelectionUpdate)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('selectionchange', handlePassageSelectionChange)
+  window.removeEventListener('scroll', scheduleLookupSelectionUpdate, true)
+  window.removeEventListener('resize', scheduleLookupSelectionUpdate)
+  if (lookupSelectionRaf) {
+    window.cancelAnimationFrame(lookupSelectionRaf)
+    lookupSelectionRaf = null
+  }
+  clearClozeClickTimer()
 })
 </script>
 
@@ -365,16 +606,23 @@ onMounted(async () => {
                 :class="{
                   selected: activeBlank && answers[activeBlank.blankId] === option.word,
                   used: isOptionUsed(option.word),
+                  locked: Boolean(attempt),
                 }"
-                :disabled="Boolean(attempt)"
-                @click="selectActiveAnswer(option)"
+                :aria-disabled="Boolean(attempt)"
+                @click="handleOptionClick(option)"
+                @dblclick.stop.prevent="handleOptionDoubleClick(option)"
               >
                 <span>{{ option.label }}</span>
                 {{ option.word }}
               </button>
             </div>
 
-            <div class="cloze-passage">
+            <div
+              ref="passageRef"
+              class="cloze-passage"
+              @mouseup="handlePassageSelectionChange"
+              @keyup="handlePassageSelectionChange"
+            >
               <template v-for="(part, index) in clozePassageParts" :key="index">
                 <span v-if="part.type === 'text'">{{ part.text }}</span>
                 <button
@@ -386,14 +634,27 @@ onMounted(async () => {
                     answered: Boolean(answers[part.blank.blankId]),
                     correct: blankAnswer(part.blank.blankId)?.correct === true,
                     wrong: blankAnswer(part.blank.blankId)?.correct === false,
+                    locked: Boolean(attempt),
                   }"
-                  :disabled="Boolean(attempt)"
-                  @click="setActiveBlank(part.blank)"
+                  :aria-disabled="Boolean(attempt)"
+                  @click="handleBlankClick(part.blank)"
+                  @dblclick.stop.prevent="handleBlankDoubleClick(part.blank)"
                 >
                   {{ inlineBlankLabel(part.blank) }}
                 </button>
               </template>
             </div>
+
+            <button
+              v-if="lookupSelectionVisible"
+              class="cloze-lookup-float"
+              type="button"
+              :style="lookupSelectionStyle"
+              @mousedown.prevent
+              @click="handleLookupSelectionLookup"
+            >
+              查词
+            </button>
 
             <div class="cloze-answer-panel">
               <div class="blank-title-row">
@@ -411,9 +672,11 @@ onMounted(async () => {
                     answered: Boolean(answers[blank.blankId]),
                     correct: blankAnswer(blank.blankId)?.correct === true,
                     wrong: blankAnswer(blank.blankId)?.correct === false,
+                    locked: Boolean(attempt),
                   }"
-                  :disabled="Boolean(attempt)"
-                  @click="setActiveBlank(blank)"
+                  :aria-disabled="Boolean(attempt)"
+                  @click="handleBlankClick(blank)"
+                  @dblclick.stop.prevent="handleBlankDoubleClick(blank)"
                 >
                   <span>{{ blank.blankNo }}</span>
                   {{ selectedOptionLabel(blank.blankId) }}
@@ -469,5 +732,43 @@ onMounted(async () => {
 
       </div>
     </template>
+
+    <el-dialog v-model="lookupVisible" class="cloze-lookup-dialog" width="420px" append-to-body @closed="closeLookup">
+      <template #header>
+        <div class="cloze-lookup-header">
+          <strong>{{ lookupResult?.word || lookupWord }}</strong>
+          <span v-if="lookupResult?.normalizedWord && lookupResult.normalizedWord !== lookupResult.word">
+            {{ lookupResult.normalizedWord }}
+          </span>
+        </div>
+      </template>
+
+      <el-skeleton v-if="lookupLoading" :rows="4" animated />
+      <el-empty v-else-if="lookupError" :description="lookupError" :image-size="72" />
+      <div v-else-if="lookupResult" class="cloze-lookup-content">
+        <div v-if="lookupResult.phonetic0 || lookupResult.phonetic1" class="cloze-lookup-phonetics">
+          <span v-if="lookupResult.phonetic0">英 {{ lookupResult.phonetic0 }}</span>
+          <span v-if="lookupResult.phonetic1">美 {{ lookupResult.phonetic1 }}</span>
+        </div>
+
+        <div v-if="lookupDefinitions.length" class="cloze-lookup-section">
+          <div v-for="definition in lookupDefinitions" :key="definition.key" class="cloze-lookup-definition">
+            <span v-if="definition.pos">{{ definition.pos }}</span>
+            <p>{{ definition.definitions.join('；') }}</p>
+          </div>
+        </div>
+
+        <div v-if="lookupSentences.length" class="cloze-lookup-section">
+          <div v-for="sentence in lookupSentences" :key="sentence.key" class="cloze-lookup-sentence">
+            <p>{{ sentence.english }}</p>
+            <span v-if="sentence.chinese">{{ sentence.chinese }}</span>
+          </div>
+        </div>
+
+        <p v-if="!lookupDefinitions.length && !lookupSentences.length" class="cloze-lookup-muted">
+          暂无更多释义或例句信息。
+        </p>
+      </div>
+    </el-dialog>
   </section>
 </template>
