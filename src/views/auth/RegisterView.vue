@@ -44,38 +44,45 @@ async function submit() {
 
 <template>
   <main class="auth-page">
-    <section class="auth-panel">
-      <div class="auth-brand">
-        <div class="brand-mark large">L</div>
-        <div>
-          <h1>创建账号</h1>
-          <p>开始你的考试词库学习计划</p>
+    <section class="auth-shell">
+      <section class="auth-panel">
+        <div class="auth-brand">
+          <div class="brand-mark large">L</div>
+          <div>
+            <h1>LexiFlow</h1>
+            <p>AI 辅助背单词工作台</p>
+          </div>
         </div>
-      </div>
+        <div class="auth-panel-heading">
+          <span class="auth-kicker">注册</span>
+          <h2>创建学习账号</h2>
+          <p>开始你的考试词库学习计划。</p>
+        </div>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="auth-form" @keyup.enter="submit">
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model.trim="form.email" size="large" placeholder="student@example.com">
-            <template #prefix><el-icon><Message /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="昵称" prop="nickname">
-          <el-input v-model.trim="form.nickname" size="large" placeholder="你的昵称">
-            <template #prefix><el-icon><User /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="form.password" size="large" type="password" show-password placeholder="包含字母和数字">
-            <template #prefix><el-icon><Lock /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-button type="primary" size="large" :loading="loading" :disabled="loading" class="full-button" @click="submit">注册</el-button>
-      </el-form>
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="auth-form" @keyup.enter="submit">
+          <el-form-item label="邮箱" prop="email">
+            <el-input v-model.trim="form.email" size="large" placeholder="student@example.com">
+              <template #prefix><el-icon><Message /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="昵称" prop="nickname">
+            <el-input v-model.trim="form.nickname" size="large" placeholder="你的昵称">
+              <template #prefix><el-icon><User /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input v-model="form.password" size="large" type="password" show-password placeholder="包含字母和数字">
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-button type="primary" size="large" :loading="loading" :disabled="loading" class="full-button" @click="submit">注册</el-button>
+        </el-form>
 
-      <div class="auth-footer">
-        <span>已有账号？</span>
-        <RouterLink to="/login">登录</RouterLink>
-      </div>
+        <div class="auth-footer">
+          <span>已有账号？</span>
+          <RouterLink to="/login">登录</RouterLink>
+        </div>
+      </section>
     </section>
   </main>
 </template>

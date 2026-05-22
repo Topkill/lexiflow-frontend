@@ -64,10 +64,10 @@ onMounted(loadData)
 
     <template v-else>
       <div class="metric-grid">
-        <MetricCard label="本组新词" :value="task?.newCount ?? 0" />
-        <MetricCard label="本组复习" :value="task?.reviewCount ?? stats?.dueReviewWords ?? 0" tone="warn" />
-        <MetricCard label="本组完成" :value="task?.doneCount ?? 0" />
-        <MetricCard label="连续学习" :value="stats?.streakDays ?? 0" suffix=" 天" tone="success" />
+        <MetricCard label="本组新词" :value="task?.newCount ?? 0" visual="words" />
+        <MetricCard label="本组复习" :value="task?.reviewCount ?? stats?.dueReviewWords ?? 0" tone="warn" visual="review" />
+        <MetricCard label="本组完成" :value="task?.doneCount ?? 0" visual="done" />
+        <MetricCard label="连续学习" :value="stats?.streakDays ?? 0" suffix=" 天" tone="success" visual="streak" />
       </div>
 
       <div class="work-grid dashboard-work-grid">
