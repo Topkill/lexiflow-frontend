@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Calendar, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
@@ -38,6 +38,8 @@ const form = reactive({
   targetWordCount: 10,
 })
 const answers = reactive({})
+const CLOZE_DRAFT_STORAGE_PREFIX = 'lexiflow:cloze-draft:'
+const CLOZE_DRAFT_VERSION = 1
 const queryTaskId = computed(() => route.query.taskId || '')
 const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
@@ -71,6 +73,7 @@ const answeredCount = computed(() => {
   const blanks = quiz.value?.blanks || []
   return blanks.filter((blank) => answers[blank.blankId]).length
 })
+const hasFilledAnswers = computed(() => answeredCount.value > 0)
 const clozePassageParts = computed(() => {
   if (!quiz.value?.passage) return []
   const blanksByNo = new Map((quiz.value.blanks || []).map((blank) => [String(blank.blankNo), blank]))
@@ -157,6 +160,100 @@ function resetQuizState() {
   Object.keys(answers).forEach((key) => delete answers[key])
 }
 
+function getClozeDraftStorage() {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function clozeDraftStorageKey(quizId = quiz.value?.quizId) {
+  return quizId ? `${CLOZE_DRAFT_STORAGE_PREFIX}${quizId}` : ''
+}
+
+function serializeDraftAnswers() {
+  const draftAnswers = {}
+  ;(quiz.value?.blanks || []).forEach((blank) => {
+    const value = answers[blank.blankId]
+    if (value) {
+      draftAnswers[String(blank.blankId)] = value
+    }
+  })
+  return draftAnswers
+}
+
+function clearClozeDraft(quizId = quiz.value?.quizId) {
+  const storage = getClozeDraftStorage()
+  const key = clozeDraftStorageKey(quizId)
+  if (!storage || !key) return
+  try {
+    storage.removeItem(key)
+  } catch {
+    // 本地存储不可用时，不影响当前练习流程。
+  }
+}
+
+function saveClozeDraft() {
+  if (!quiz.value?.quizId || attempt.value) return
+  const storage = getClozeDraftStorage()
+  const key = clozeDraftStorageKey()
+  if (!storage || !key) return
+  const draftAnswers = serializeDraftAnswers()
+  if (!Object.keys(draftAnswers).length) {
+    clearClozeDraft()
+    return
+  }
+  try {
+    storage.setItem(key, JSON.stringify({
+      version: CLOZE_DRAFT_VERSION,
+      quizId: String(quiz.value.quizId),
+      selectedBlankId: selectedBlankId.value ? String(selectedBlankId.value) : '',
+      answers: draftAnswers,
+      updatedAt: Date.now(),
+    }))
+  } catch {
+    // 本地存储写入失败时，用户仍可继续答题。
+  }
+}
+
+function restoreClozeDraft() {
+  const storage = getClozeDraftStorage()
+  const key = clozeDraftStorageKey()
+  if (!storage || !key || !quiz.value?.quizId) return false
+  let draft
+  try {
+    draft = JSON.parse(storage.getItem(key) || 'null')
+  } catch {
+    clearClozeDraft()
+    return false
+  }
+  if (!draft || String(draft.quizId) !== String(quiz.value.quizId) || !draft.answers) {
+    return false
+  }
+
+  const validBlankIds = new Set((quiz.value.blanks || []).map((blank) => String(blank.blankId)))
+  const validWords = new Set(candidateWords.value.map((word) => String(word)))
+  let restoredCount = 0
+  Object.entries(draft.answers).forEach(([blankId, word]) => {
+    if (!validBlankIds.has(String(blankId)) || !word) return
+    if (validWords.size && !validWords.has(String(word))) return
+    answers[blankId] = word
+    restoredCount += 1
+  })
+
+  if (!restoredCount) {
+    clearClozeDraft()
+    return false
+  }
+
+  const savedBlankId = draft.selectedBlankId ? String(draft.selectedBlankId) : ''
+  selectedBlankId.value = validBlankIds.has(savedBlankId)
+    ? savedBlankId
+    : (firstUnansweredBlank()?.blankId || quiz.value.blanks?.[0]?.blankId || null)
+  return true
+}
+
 function applyRouteGenerateError() {
   if (route.query.generateError === 'config') {
     generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
@@ -203,7 +300,10 @@ async function generateQuiz() {
 async function loadQuizById(quizId) {
   resetQuizState()
   quiz.value = await fetchClozeQuiz(quizId)
-  selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
+  const draftRestored = restoreClozeDraft()
+  if (!draftRestored) {
+    selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
+  }
   startedAt.value = Date.now()
 }
 
@@ -219,6 +319,7 @@ async function submitAnswers() {
     if (todayTask.value) {
       todayTask.value.clozeAttempted = true
     }
+    clearClozeDraft()
     ElMessage.success('答案已提交')
   } finally {
     submitting.value = false
@@ -289,6 +390,12 @@ function clearAnswer(blank) {
   if (attempt.value) return
   delete answers[blank.blankId]
   selectedBlankId.value = blank.blankId
+}
+
+function clearAllAnswers() {
+  if (attempt.value || !hasFilledAnswers.value) return
+  Object.keys(answers).forEach((key) => delete answers[key])
+  selectedBlankId.value = firstUnansweredBlank()?.blankId || null
 }
 
 function firstUnansweredBlank() {
@@ -504,6 +611,15 @@ function normalizeLookupSentences(value) {
   }).filter(Boolean)
 }
 
+watch(
+  () => [
+    quiz.value?.quizId || '',
+    selectedBlankId.value || '',
+    ...(quiz.value?.blanks || []).map((blank) => answers[blank.blankId] || ''),
+  ],
+  () => saveClozeDraft()
+)
+
 onMounted(async () => {
   await loadTodayTask()
   applyRouteGenerateError()
@@ -683,8 +799,17 @@ onBeforeUnmount(() => {
                 </button>
               </div>
               <div v-if="activeBlank && !attempt" class="cloze-active-line">
-                <span>当前空格 {{ activeBlank.blankNo }}</span>
-                <el-button v-if="answers[activeBlank.blankId]" text @click="clearAnswer(activeBlank)">清空</el-button>
+                <span class="cloze-active-label">当前空格 {{ activeBlank.blankNo }}</span>
+                <div class="cloze-active-actions">
+                  <el-button
+                    text
+                    :disabled="!answers[activeBlank.blankId]"
+                    @click="clearAnswer(activeBlank)"
+                  >
+                    清空
+                  </el-button>
+                  <el-button v-if="hasFilledAnswers" text @click="clearAllAnswers">全部清空</el-button>
+                </div>
               </div>
               <div v-if="attempt" class="cloze-result-list">
                 <div v-for="blank in quiz.blanks" :key="`result-${blank.blankId}`" class="cloze-result-row">
@@ -703,7 +828,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="cloze-submit-row">
-              <el-button :disabled="Boolean(attempt) || !allAnswered || submitting || generating" type="primary" :loading="submitting" @click="submitAnswers">
+              <el-button v-if="!attempt" :disabled="!allAnswered || submitting || generating" type="primary" :loading="submitting" @click="submitAnswers">
                 提交答案
               </el-button>
               <template v-if="attempt && isWrongPracticeTask">

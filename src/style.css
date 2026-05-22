@@ -2537,8 +2537,22 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
 .cloze-active-line {
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(20, 184, 166, 0.1);
   color: var(--muted);
+}
+
+.cloze-active-label {
+  font-size: 13px;
+}
+
+.cloze-active-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .cloze-lookup-float {
@@ -2639,7 +2653,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
   line-height: 1.5;
 }
 
-.cloze-active-line .el-button {
+.cloze-active-actions .el-button {
   margin-left: 0 !important;
 }
 
