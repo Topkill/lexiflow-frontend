@@ -2452,9 +2452,17 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-inline-blank.wrong {
-  border-color: rgba(220, 38, 38, 0.5);
-  background: #fef2f2;
-  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.82);
+  background: #fee2e2;
+  color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.cloze-inline-blank.revealed {
+  border-color: rgba(14, 116, 144, 0.5);
+  background: #ecfeff;
+  color: #155e75;
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.1);
 }
 
 .cloze-inline-blank:disabled {
@@ -2522,9 +2530,15 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-answer-pill.wrong {
-  border-color: rgba(220, 38, 38, 0.42);
-  background: #fef2f2;
-  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.72);
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.cloze-answer-pill.revealed {
+  border-color: rgba(14, 116, 144, 0.46);
+  background: #ecfeff;
+  color: #155e75;
 }
 
 .cloze-answer-pill:disabled {
@@ -2675,6 +2689,14 @@ body.study-ai-dialog-open .app-main .content-wrap {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.blank-title-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .answer-result {
@@ -3149,6 +3171,46 @@ body.study-ai-dialog-open .app-main .content-wrap {
 .app-shell .cloze-answer-pill span {
   background: var(--app-primary-soft);
   color: #176d66;
+}
+
+.app-shell .cloze-inline-blank.correct,
+.app-shell .cloze-answer-pill.correct {
+  border-color: rgba(5, 150, 105, 0.62);
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.app-shell .cloze-inline-blank.wrong,
+.app-shell .cloze-answer-pill.wrong {
+  border-color: rgba(220, 38, 38, 0.95);
+  background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+  color: #7f1d1d;
+  box-shadow:
+    inset 0 0 0 1px rgba(220, 38, 38, 0.35),
+    0 0 0 4px rgba(220, 38, 38, 0.18),
+    0 10px 20px rgba(185, 28, 28, 0.12);
+  font-weight: 800;
+}
+
+.app-shell .cloze-answer-pill.wrong span {
+  background: #dc2626;
+  color: #fff;
+}
+
+.app-shell .cloze-inline-blank.revealed,
+.app-shell .cloze-answer-pill.revealed {
+  border-color: rgba(14, 116, 144, 0.54);
+  background: linear-gradient(180deg, #ecfeff 0%, #cffafe 100%);
+  color: #155e75;
+  box-shadow:
+    inset 0 0 0 1px rgba(14, 116, 144, 0.18),
+    0 0 0 3px rgba(14, 116, 144, 0.12);
+  font-weight: 760;
+}
+
+.app-shell .cloze-answer-pill.revealed span {
+  background: #0891b2;
+  color: #fff;
 }
 
 .app-shell .report-metrics div,

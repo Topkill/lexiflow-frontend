@@ -18,6 +18,7 @@ const submitting = ref(false)
 const todayTask = ref(null)
 const quiz = ref(null)
 const attempt = ref(null)
+const showCorrectAnswers = ref(false)
 const needsPlan = ref(false)
 const loadError = ref('')
 const generateError = ref('')
@@ -155,6 +156,7 @@ async function loadTodayTask() {
 function resetQuizState() {
   quiz.value = null
   attempt.value = null
+  showCorrectAnswers.value = false
   selectedBlankId.value = null
   closeLookup()
   Object.keys(answers).forEach((key) => delete answers[key])
@@ -254,6 +256,16 @@ function restoreClozeDraft() {
   return true
 }
 
+function applyAttemptAnswers(attemptResult) {
+  Object.keys(answers).forEach((key) => delete answers[key])
+  ;(attemptResult?.answers || []).forEach((answer) => {
+    if (answer?.blankId && answer.userAnswer) {
+      answers[answer.blankId] = answer.userAnswer
+    }
+  })
+  selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
+}
+
 function applyRouteGenerateError() {
   if (route.query.generateError === 'config') {
     generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
@@ -300,9 +312,16 @@ async function generateQuiz() {
 async function loadQuizById(quizId) {
   resetQuizState()
   quiz.value = await fetchClozeQuiz(quizId)
-  const draftRestored = restoreClozeDraft()
-  if (!draftRestored) {
-    selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
+  attempt.value = quiz.value?.attempt || null
+  if (attempt.value) {
+    showCorrectAnswers.value = false
+    applyAttemptAnswers(attempt.value)
+    clearClozeDraft(quizId)
+  } else {
+    const draftRestored = restoreClozeDraft()
+    if (!draftRestored) {
+      selectedBlankId.value = quiz.value?.blanks?.[0]?.blankId || null
+    }
   }
   startedAt.value = Date.now()
 }
@@ -316,6 +335,7 @@ async function submitAnswers() {
       durationSeconds,
       answers: quiz.value.blanks.map((blank) => ({ blankId: blank.blankId, answer: answers[blank.blankId] })),
     })
+    showCorrectAnswers.value = false
     if (todayTask.value) {
       todayTask.value.clozeAttempted = true
     }
@@ -374,6 +394,7 @@ function handleOptionClick(option) {
 
 function handleOptionDoubleClick(option) {
   clearClozeClickTimer()
+  if (!attempt.value) return
   lookupByRawWord(option?.word)
 }
 
@@ -383,7 +404,7 @@ function handleBlankClick(blank) {
 
 function handleBlankDoubleClick(blank) {
   clearClozeClickTimer()
-  lookupByRawWord(answers[blank.blankId])
+  lookupByRawWord(lookupWordForDisplayedBlank(blank.blankId))
 }
 
 function clearAnswer(blank) {
@@ -424,19 +445,40 @@ function isOptionUsed(word) {
 }
 
 function selectedOptionLabel(blankId) {
-  const selectedWord = answers[blankId]
+  const selectedWord = answers[blankId] || blankAnswer(blankId)?.userAnswer
   const option = candidateOptions.value.find((candidate) => candidate.word === selectedWord)
   return option?.label || '未选择'
 }
 
+function displayedAnswerWord(blankId) {
+  if (attempt.value && showCorrectAnswers.value) {
+    const correctAnswer = blankAnswer(blankId)?.correctAnswer
+    if (correctAnswer) {
+      return correctAnswer
+    }
+  }
+  return selectedOptionLabel(blankId)
+}
+
+function lookupWordForDisplayedBlank(blankId) {
+  return attempt.value && showCorrectAnswers.value
+    ? blankAnswer(blankId)?.correctAnswer || ''
+    : ''
+}
+
 function inlineBlankLabel(blank) {
-  const label = selectedOptionLabel(blank.blankId)
+  const label = displayedAnswerWord(blank.blankId)
   return label === '未选择' ? `__${blank.blankNo}__` : label
 }
 
 function answerOptionLabel(word) {
   const option = candidateOptions.value.find((candidate) => candidate.word === word)
   return option ? `${option.label}. ${word}` : word
+}
+
+function toggleRevealCorrectAnswers() {
+  if (!attempt.value) return
+  showCorrectAnswers.value = !showCorrectAnswers.value
 }
 
 function handlePassageSelectionChange() {
@@ -748,8 +790,9 @@ onBeforeUnmount(() => {
                   :class="{
                     active: !attempt && String(selectedBlankId) === String(part.blank.blankId),
                     answered: Boolean(answers[part.blank.blankId]),
-                    correct: blankAnswer(part.blank.blankId)?.correct === true,
-                    wrong: blankAnswer(part.blank.blankId)?.correct === false,
+                    revealed: Boolean(attempt && showCorrectAnswers),
+                    correct: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === true,
+                    wrong: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === false,
                     locked: Boolean(attempt),
                   }"
                   :aria-disabled="Boolean(attempt)"
@@ -775,7 +818,18 @@ onBeforeUnmount(() => {
             <div class="cloze-answer-panel">
               <div class="blank-title-row">
                 <strong>答案</strong>
-                <el-tag :type="allAnswered ? 'success' : 'info'">{{ answeredCount }}/{{ quiz.blanks.length }}</el-tag>
+                <div class="blank-title-actions">
+                  <el-tag :type="allAnswered ? 'success' : 'info'">{{ answeredCount }}/{{ quiz.blanks.length }}</el-tag>
+                  <el-button
+                    v-if="attempt"
+                    size="small"
+                    :type="showCorrectAnswers ? 'warning' : 'primary'"
+                    plain
+                    @click="toggleRevealCorrectAnswers"
+                  >
+                    {{ showCorrectAnswers ? '恢复原答案' : '显示正确答案' }}
+                  </el-button>
+                </div>
               </div>
               <div class="cloze-answer-strip">
                 <button
@@ -786,8 +840,9 @@ onBeforeUnmount(() => {
                   :class="{
                     active: !attempt && String(selectedBlankId) === String(blank.blankId),
                     answered: Boolean(answers[blank.blankId]),
-                    correct: blankAnswer(blank.blankId)?.correct === true,
-                    wrong: blankAnswer(blank.blankId)?.correct === false,
+                    revealed: Boolean(attempt && showCorrectAnswers),
+                    correct: !showCorrectAnswers && blankAnswer(blank.blankId)?.correct === true,
+                    wrong: !showCorrectAnswers && blankAnswer(blank.blankId)?.correct === false,
                     locked: Boolean(attempt),
                   }"
                   :aria-disabled="Boolean(attempt)"
@@ -795,7 +850,7 @@ onBeforeUnmount(() => {
                   @dblclick.stop.prevent="handleBlankDoubleClick(blank)"
                 >
                   <span>{{ blank.blankNo }}</span>
-                  {{ selectedOptionLabel(blank.blankId) }}
+                  {{ displayedAnswerWord(blank.blankId) }}
                 </button>
               </div>
               <div v-if="activeBlank && !attempt" class="cloze-active-line">
