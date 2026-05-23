@@ -3,10 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
-import { askWordQuestion, createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
+import { askWordQuestion, createClozeTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
 
@@ -40,8 +41,21 @@ const clozeAiQuestion = ref('')
 const clozeAiResult = ref(null)
 const clozeAiTarget = ref(null)
 const clozeAiQuestionInputRef = ref(null)
+const aiReviewState = ref('idle')
+const aiReviewMessage = ref('')
+const aiReviewText = ref('')
+const aiReviewContent = ref(null)
+const aiReviewError = ref('')
+const aiReviewAttemptId = ref('')
+const aiReviewCacheHit = ref(false)
+const aiReviewMarkdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 let clozeClickTimer = null
 let lookupSelectionRaf = null
+let aiReviewAbortController = null
 const form = reactive({
   sourceType: 'COMPLETED_GROUP',
   targetWordCount: 10,
@@ -131,6 +145,23 @@ const lookupDefinitions = computed(() => {
 })
 const lookupSentences = computed(() => normalizeLookupSentences(lookupResult.value?.sentences).slice(0, 2))
 const passageZh = computed(() => normalizeLookupText(quiz.value?.passageZh))
+const aiReviewHtml = computed(() => {
+  if (!aiReviewText.value) return ''
+  return aiReviewMarkdown.render(normalizeAiReviewMarkdown(aiReviewText.value))
+})
+const aiReviewTagType = computed(() => {
+  if (aiReviewState.value === 'done') return aiReviewCacheHit.value ? 'success' : 'primary'
+  if (aiReviewState.value === 'failed') return 'danger'
+  if (aiReviewState.value === 'loading' || aiReviewState.value === 'streaming') return 'warning'
+  return 'info'
+})
+const aiReviewTagLabel = computed(() => {
+  if (aiReviewState.value === 'done') return aiReviewCacheHit.value ? '已缓存' : '已完成'
+  if (aiReviewState.value === 'failed') return '失败'
+  if (aiReviewState.value === 'streaming') return '输出中'
+  if (aiReviewState.value === 'loading') return '生成中'
+  return '等待生成'
+})
 
 function blankAnswer(blankId) {
   return wrongAnswerMap.value.get(String(blankId))
@@ -168,6 +199,7 @@ function resetQuizState() {
   showCorrectAnswers.value = false
   selectedBlankId.value = null
   closeLookup()
+  resetAiReviewState()
   Object.keys(answers).forEach((key) => delete answers[key])
 }
 
@@ -326,6 +358,7 @@ async function loadQuizById(quizId) {
     showCorrectAnswers.value = false
     applyAttemptAnswers(attempt.value)
     clearClozeDraft(quizId)
+    void loadOrStartAiReview(attempt.value.attemptId)
   } else {
     const draftRestored = restoreClozeDraft()
     if (!draftRestored) {
@@ -349,9 +382,228 @@ async function submitAnswers() {
       todayTask.value.clozeAttempted = true
     }
     clearClozeDraft()
+    void startAiReviewStream(attempt.value.attemptId)
     ElMessage.success('答案已提交')
   } finally {
     submitting.value = false
+  }
+}
+
+function resetAiReviewState() {
+  abortAiReviewStream()
+  aiReviewState.value = 'idle'
+  aiReviewMessage.value = ''
+  aiReviewText.value = ''
+  aiReviewContent.value = null
+  aiReviewError.value = ''
+  aiReviewAttemptId.value = ''
+  aiReviewCacheHit.value = false
+}
+
+function abortAiReviewStream() {
+  if (!aiReviewAbortController) return
+  aiReviewAbortController.abort()
+  aiReviewAbortController = null
+}
+
+async function loadOrStartAiReview(attemptId) {
+  const id = String(attemptId || '')
+  if (!id) return
+  if (aiReviewAttemptId.value === id && ['loading', 'streaming', 'done'].includes(aiReviewState.value)) return
+  aiReviewAttemptId.value = id
+  aiReviewError.value = ''
+  try {
+    const review = await fetchClozeAttemptAiReview(id)
+    if (applyAiReviewResponse(review)) {
+      return
+    }
+    if (review?.status === 'FAILED') {
+      return
+    }
+  } catch {
+    // 查询失败时继续尝试流式生成，避免刷新恢复被一次普通查询阻塞。
+  }
+  void startAiReviewStream(id)
+}
+
+function applyAiReviewResponse(review) {
+  if (!review) return false
+  aiReviewAttemptId.value = String(review.attemptId || aiReviewAttemptId.value || '')
+  aiReviewContent.value = review.content || null
+  aiReviewCacheHit.value = Boolean(review.cacheHit)
+  if (review.status === 'DONE') {
+    aiReviewState.value = 'done'
+    aiReviewText.value = review.displayText || aiReviewText.value
+    aiReviewError.value = ''
+    return true
+  }
+  if (review.status === 'FAILED') {
+    aiReviewState.value = 'failed'
+    aiReviewError.value = review.errorMessage || 'AI 评阅生成失败，请稍后重试'
+    return false
+  }
+  if (review.status === 'RUNNING') {
+    aiReviewState.value = 'loading'
+    aiReviewMessage.value = '正在生成 AI 评阅'
+    return false
+  }
+  return false
+}
+
+function normalizeAiReviewMarkdown(text) {
+  const trimmed = String(text || '').trim()
+  if (!trimmed) return ''
+  return trimmed
+    .replace(/^#{1,3}\s*AI\s*评阅\s*\n+/i, '')
+    .replace(/^AI\s*评阅\s*\n+/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+async function startAiReviewStream(attemptId, regenerate = false) {
+  const id = String(attemptId || '')
+  if (!id) return
+  abortAiReviewStream()
+  aiReviewAttemptId.value = id
+  aiReviewState.value = 'loading'
+  aiReviewMessage.value = '正在生成 AI 评阅'
+  aiReviewText.value = ''
+  aiReviewContent.value = null
+  aiReviewError.value = ''
+  aiReviewCacheHit.value = false
+  const controller = new AbortController()
+  aiReviewAbortController = controller
+  try {
+    const response = await fetch(buildAiReviewStreamUrl(id, regenerate), {
+      method: 'GET',
+      headers: buildAiReviewStreamHeaders(),
+      signal: controller.signal,
+      credentials: 'include',
+    })
+    if (!response.ok || !response.body) {
+      throw new Error(await readAiReviewStreamError(response))
+    }
+    await readAiReviewSse(response)
+    if (['loading', 'streaming'].includes(aiReviewState.value)) {
+      aiReviewState.value = aiReviewText.value ? 'done' : 'idle'
+    }
+  } catch (error) {
+    if (controller.signal.aborted) return
+    aiReviewState.value = 'failed'
+    aiReviewError.value = error?.message || 'AI 评阅生成失败，请稍后重试'
+  } finally {
+    if (aiReviewAbortController === controller) {
+      aiReviewAbortController = null
+    }
+  }
+}
+
+function buildAiReviewStreamUrl(attemptId, regenerate = false) {
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+  const query = regenerate ? '?regenerate=true' : ''
+  return `${baseUrl}/api/v1/quizzes/cloze/attempts/${attemptId}/ai-review/stream${query}`
+}
+
+function buildAiReviewStreamHeaders() {
+  const headers = { Accept: 'text/event-stream' }
+  try {
+    const token = window.localStorage.getItem('lexiflow_access_token')
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+  } catch {
+    // localStorage 不可用时让后端按未登录处理。
+  }
+  return headers
+}
+
+async function readAiReviewStreamError(response) {
+  try {
+    const text = await response.text()
+    const body = JSON.parse(text)
+    return body?.message || `AI 评阅请求失败（${response.status}）`
+  } catch {
+    return `AI 评阅请求失败（${response.status}）`
+  }
+}
+
+async function readAiReviewSse(response) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    buffer = consumeAiReviewSseBuffer(buffer)
+  }
+  buffer += decoder.decode()
+  consumeAiReviewSseBuffer(buffer, true)
+}
+
+function consumeAiReviewSseBuffer(buffer, flush = false) {
+  let rest = buffer.replace(/\r/g, '')
+  let separatorIndex = rest.indexOf('\n\n')
+  while (separatorIndex >= 0) {
+    const block = rest.slice(0, separatorIndex).trim()
+    rest = rest.slice(separatorIndex + 2)
+    if (block) {
+      handleAiReviewSseBlock(block)
+    }
+    separatorIndex = rest.indexOf('\n\n')
+  }
+  if (flush && rest.trim()) {
+    handleAiReviewSseBlock(rest.trim())
+    return ''
+  }
+  return rest
+}
+
+function handleAiReviewSseBlock(block) {
+  const lines = block.split('\n')
+  let event = 'message'
+  const dataLines = []
+  lines.forEach((line) => {
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  })
+  const rawData = dataLines.join('\n')
+  let data = rawData
+  if (rawData) {
+    try {
+      data = JSON.parse(rawData)
+    } catch {
+      data = rawData
+    }
+  }
+  handleAiReviewSseEvent(event, data)
+}
+
+function handleAiReviewSseEvent(event, data) {
+  if (event === 'status') {
+    aiReviewMessage.value = data?.message || '正在生成 AI 评阅'
+    if (!aiReviewText.value) {
+      aiReviewState.value = 'loading'
+    }
+    return
+  }
+  if (event === 'chunk') {
+    const text = typeof data === 'string' ? data : (data?.text || '')
+    if (text) {
+      aiReviewState.value = 'streaming'
+      aiReviewText.value += text
+    }
+    return
+  }
+  if (event === 'done') {
+    applyAiReviewResponse(data)
+    return
+  }
+  if (event === 'error') {
+    aiReviewState.value = 'failed'
+    aiReviewError.value = data?.message || 'AI 评阅生成失败，请稍后重试'
   }
 }
 
@@ -796,6 +1048,7 @@ onBeforeUnmount(() => {
     window.cancelAnimationFrame(lookupSelectionRaf)
     lookupSelectionRaf = null
   }
+  abortAiReviewStream()
   clearClozeClickTimer()
 })
 </script>
@@ -1042,6 +1295,39 @@ onBeforeUnmount(() => {
                       选择原因：{{ blankReasonZh(blank.blankId) }}
                     </div>
                   </div>
+                </div>
+              </div>
+              <div v-if="attempt" class="cloze-ai-review-panel">
+                <div class="blank-title-row">
+                  <strong>AI 评阅</strong>
+                  <div class="blank-title-actions">
+                    <el-tag :type="aiReviewTagType">{{ aiReviewTagLabel }}</el-tag>
+                    <el-button
+                      v-if="aiReviewState === 'failed'"
+                      size="small"
+                      plain
+                      :disabled="submitting || generating"
+                      @click="startAiReviewStream(attempt.attemptId, true)"
+                    >
+                      重新生成
+                    </el-button>
+                  </div>
+                </div>
+                <div class="cloze-ai-review-text" :class="`is-${aiReviewState}`">
+                  <template v-if="aiReviewState === 'loading' && !aiReviewText">
+                    <span>{{ aiReviewMessage || '正在生成 AI 评阅...' }}</span>
+                  </template>
+                  <template v-else-if="aiReviewState === 'failed'">
+                    <span>{{ aiReviewError || 'AI 评阅生成失败，请稍后重试。' }}</span>
+                  </template>
+                  <template v-else>
+                    <div
+                      v-if="aiReviewHtml"
+                      class="cloze-ai-review-markdown"
+                      v-html="aiReviewHtml"
+                    />
+                    <span v-else>{{ aiReviewText || 'AI 评阅尚未生成。' }}</span>
+                  </template>
                 </div>
               </div>
             </div>
