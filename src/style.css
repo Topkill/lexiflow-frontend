@@ -1330,6 +1330,11 @@ body.study-ai-dialog-open .app-main .content-wrap {
   flex-wrap: wrap;
 }
 
+.cloze-card-ai-button.el-button {
+  height: 30px;
+  padding: 0 12px;
+}
+
 .task-summary,
 .plan-card-body,
 .progress-panel,

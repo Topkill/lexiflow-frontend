@@ -866,9 +866,11 @@ onBeforeUnmount(() => {
                 <span>{{ quiz.title || '完形填空练习' }}</span>
                 <div v-if="attempt" class="cloze-card-actions">
                   <el-button
+                    size="small"
                     plain
                     :icon="ChatLineRound"
                     :disabled="!(quiz.blanks || []).some((blank) => blank.wordId)"
+                    class="cloze-card-ai-button"
                     @click="openFirstClozeAiQuestion"
                   >
                     AI 问答
