@@ -123,6 +123,7 @@ const lookupDefinitions = computed(() => {
     : []
 })
 const lookupSentences = computed(() => normalizeLookupSentences(lookupResult.value?.sentences).slice(0, 2))
+const passageZh = computed(() => normalizeLookupText(quiz.value?.passageZh))
 
 function blankAnswer(blankId) {
   return wrongAnswerMap.value.get(String(blankId))
@@ -477,12 +478,42 @@ function answerOptionLabel(word) {
   return option ? `${option.label}. ${word}` : word
 }
 
+function blankCorrectAnswerLabel(blankId) {
+  const answer = blankAnswer(blankId)
+  return answerOptionLabel(answer?.correctAnswer)
+}
+
 function blankCorrectDefinition(blankId) {
   return blankAnswer(blankId)?.correctDefinitionZh || ''
 }
 
+function blankCorrectDefinitionLabel(blankId) {
+  const answer = blankAnswer(blankId)
+  const definition = normalizeLookupText(answer?.correctDefinitionZh)
+  const pos = normalizeLookupText(answer?.correctAnswerPos)
+  if (definition && pos) return `${definition}（${pos}）`
+  return definition || pos
+}
+
+function blankCorrectDefinitions(blankId) {
+  return Array.isArray(blankAnswer(blankId)?.correctDefinitions)
+    ? blankAnswer(blankId).correctDefinitions
+    : []
+}
+
 function blankReasonZh(blankId) {
-  return blankAnswer(blankId)?.reasonZh || blankAnswer(blankId)?.explanation || ''
+  return blankAnswer(blankId)?.reasonZh || ''
+}
+
+function formatDefinitionGroup(group) {
+  if (!group) return ''
+  const pos = normalizeLookupText(group.pos)
+  const definitions = Array.isArray(group.definitions)
+    ? group.definitions.map(normalizeLookupText).filter(Boolean)
+    : []
+  const text = definitions.join('；')
+  if (pos && text) return `${pos} ${text}`
+  return pos || text
 }
 
 function toggleRevealCorrectAnswers() {
@@ -815,6 +846,11 @@ onBeforeUnmount(() => {
               </template>
             </div>
 
+            <div v-if="attempt && passageZh" class="cloze-passage-translation">
+              <strong>短文翻译</strong>
+              <p>{{ passageZh }}</p>
+            </div>
+
             <button
               v-if="lookupSelectionVisible"
               class="cloze-lookup-float"
@@ -894,8 +930,18 @@ onBeforeUnmount(() => {
                       <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
                     </div>
                     <div class="cloze-result-line">
-                      <span>正确答案：{{ answerOptionLabel(blankAnswer(blank.blankId)?.correctAnswer) }}</span>
-                      <span v-if="blankCorrectDefinition(blank.blankId)">中文释义：{{ blankCorrectDefinition(blank.blankId) }}</span>
+                      <span>正确答案：{{ blankCorrectAnswerLabel(blank.blankId) }}</span>
+                      <span v-if="blankCorrectDefinitionLabel(blank.blankId)">本题释义：{{ blankCorrectDefinitionLabel(blank.blankId) }}</span>
+                    </div>
+                    <div v-if="blankCorrectDefinitions(blank.blankId).length" class="cloze-result-definitions">
+                      <span class="cloze-result-label">全部释义：</span>
+                      <span
+                        v-for="(definition, index) in blankCorrectDefinitions(blank.blankId)"
+                        :key="`${blank.blankId}-definition-${index}`"
+                        class="cloze-result-definition-item"
+                      >
+                        {{ formatDefinitionGroup(definition) }}
+                      </span>
                     </div>
                     <div v-if="blankReasonZh(blank.blankId)" class="cloze-result-reason">
                       选择原因：{{ blankReasonZh(blank.blankId) }}

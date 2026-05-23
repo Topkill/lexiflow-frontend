@@ -2678,6 +2678,26 @@ body.study-ai-dialog-open .app-main .content-wrap {
   margin-top: 14px;
 }
 
+.cloze-passage-translation {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(75, 85, 99, 0.12);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.cloze-passage-translation strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--primary);
+}
+
+.cloze-passage-translation p {
+  margin: 0;
+}
+
 .cloze-result-row {
   align-items: flex-start;
   color: var(--muted);
@@ -2723,6 +2743,20 @@ body.study-ai-dialog-open .app-main .content-wrap {
   padding: 8px 10px;
   border-left: 3px solid rgba(27, 188, 177, 0.38);
   background: rgba(255, 255, 255, 0.7);
+}
+
+.cloze-result-definitions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  color: var(--text);
+}
+
+.cloze-result-definition-item {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(75, 85, 99, 0.1);
 }
 
 .blank-title-row {
