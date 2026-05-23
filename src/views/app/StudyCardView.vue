@@ -31,6 +31,7 @@ const ITEM_TYPE_NEW = 'NEW'
 const ITEM_TYPE_REVIEW = 'REVIEW'
 const ITEM_TYPE_EXTRA = 'EXTRA'
 const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
+const SEGMENT_SPLIT_THRESHOLD = 10
 
 const router = useRouter()
 const route = useRoute()
@@ -48,6 +49,7 @@ const activeIndex = ref(0)
 const flowMode = ref(FLOW_SEGMENT)
 const phase = ref(PHASE_LEARN)
 const retryItems = ref([])
+const retryBatches = ref([])
 const nextRetryItems = ref([])
 const missedItems = ref([])
 const failedFeedbackItemIds = ref(new Set())
@@ -95,7 +97,7 @@ const itemBatches = computed(() => currentFlowGroup.value?.batches || [])
 const currentSegmentItems = computed(() => itemBatches.value[segmentIndex.value] || [])
 const activeItems = computed(() => (flowMode.value === FLOW_RETRY ? retryItems.value : currentSegmentItems.value))
 const currentItem = computed(() => activeItems.value[activeIndex.value])
-const segmentCount = computed(() => itemBatches.value.length)
+const segmentCount = computed(() => (flowMode.value === FLOW_RETRY ? retryBatches.value.length : itemBatches.value.length))
 const totalItemCount = computed(() => task.value?.progress?.totalCount ?? task.value?.items?.length ?? 0)
 const completedItemCount = computed(() => task.value?.progress?.doneCount ?? task.value?.doneCount ?? 0)
 const studyCompletionRate = computed(() => (
@@ -552,6 +554,7 @@ function closeLookup() {
 
 function buildItemBatches(items) {
   if (!items.length) return []
+  if (items.length <= SEGMENT_SPLIT_THRESHOLD) return [items]
   const chunkSize = Math.ceil(items.length / 3)
   const batches = []
   for (let index = 0; index < items.length; index += chunkSize) {
@@ -668,6 +671,10 @@ function flowGroupBatchIdsFromPendingItems(itemMap = createPendingItemMap()) {
     .filter((group) => group.itemBatchIds.some((ids) => ids.length > 0))
 }
 
+function retryBatchIdsFromPendingItems(itemMap = createPendingItemMap()) {
+  return retryBatches.value.map((batch) => idsFromPendingItems(batch, itemMap)).filter((ids) => ids.length > 0)
+}
+
 function itemsFromIds(ids, itemMap = createPendingItemMap()) {
   const seen = new Set()
   return (ids || []).reduce((items, id) => {
@@ -695,6 +702,13 @@ function flowGroupsFromCachedBatchIds(cacheGroups, itemMap = createPendingItemMa
       }
     })
     .filter((group) => group.batches.length > 0)
+}
+
+function batchesFromCachedIds(batchIds, itemMap = createPendingItemMap()) {
+  if (!Array.isArray(batchIds)) return []
+  return batchIds
+    .map((ids) => itemsFromIds(ids, itemMap))
+    .filter((batch) => batch.length > 0)
 }
 
 function firstAvailableFlowGroupIndex(groups, preferredIndex) {
@@ -752,6 +766,7 @@ function saveFlowState() {
     activeItemId: currentItemId && pendingItemMap.has(currentItemId) ? currentItemId : null,
     flowGroupBatchIds: flowGroupBatchIdsFromPendingItems(pendingItemMap),
     retryItemIds: idsFromPendingItems(retryItems.value, pendingItemMap),
+    retryBatchIds: retryBatchIdsFromPendingItems(pendingItemMap),
     nextRetryItemIds: idsFromPendingItems(nextRetryItems.value, pendingItemMap),
     missedItemIds: idsFromPendingItems(missedItems.value, pendingItemMap),
     failedFeedbackItemIds: [...failedFeedbackItemIds.value].filter((itemId) => pendingItemMap.has(String(itemId))),
@@ -801,6 +816,7 @@ function restoreLocalFlow() {
   const restoredFlowMode = cache.flowMode === FLOW_RETRY ? FLOW_RETRY : FLOW_SEGMENT
   const restoredPhase = cache.phase === PHASE_CONFIRM ? PHASE_CONFIRM : PHASE_LEARN
   const restoredRetryItems = itemsFromIds(cache.retryItemIds, pendingItemMap)
+  const restoredRetryBatches = batchesFromCachedIds(cache.retryBatchIds, pendingItemMap)
   const restoredFlowGroupIndex = resolveFlowGroupIndex(restoredFlowGroups, cache)
   if (restoredFlowGroupIndex < 0) return false
 
@@ -809,6 +825,9 @@ function restoreLocalFlow() {
   flowMode.value = restoredFlowMode
   phase.value = restoredPhase
   retryItems.value = restoredRetryItems
+  retryBatches.value = restoredFlowMode === FLOW_RETRY && restoredRetryBatches.length > 0
+    ? restoredRetryBatches
+    : []
   nextRetryItems.value = itemsFromIds(cache.nextRetryItemIds, pendingItemMap)
   missedItems.value = itemsFromIds(cache.missedItemIds, pendingItemMap)
   failedFeedbackItemIds.value = new Set(
@@ -818,8 +837,12 @@ function restoreLocalFlow() {
   )
 
   if (flowMode.value === FLOW_RETRY) {
-    if (!retryItems.value.length) return false
-    segmentIndex.value = clampIndex(cache.segmentIndex, itemBatches.value.length - 1)
+    if (!retryBatches.value.length) {
+      if (!retryItems.value.length) return false
+      retryBatches.value = [retryItems.value]
+    }
+    segmentIndex.value = clampIndex(cache.segmentIndex, retryBatches.value.length - 1)
+    retryItems.value = retryBatches.value[segmentIndex.value] || retryItems.value
     activeIndex.value = resolveActiveIndex(retryItems.value, cache.activeItemId, cache.activeIndex)
   } else {
     const preferredSegmentIndex = clampIndex(cache.segmentIndex, itemBatches.value.length - 1)
@@ -879,6 +902,7 @@ function resetLocalFlow(persist = true) {
   flowMode.value = FLOW_SEGMENT
   phase.value = PHASE_LEARN
   retryItems.value = []
+  retryBatches.value = []
   nextRetryItems.value = []
   missedItems.value = []
   failedFeedbackItemIds.value = new Set()
@@ -1101,9 +1125,11 @@ async function finishSegmentRound() {
 
 async function startRetryRound(items) {
   flowMode.value = FLOW_RETRY
-  retryItems.value = [...items]
+  retryBatches.value = buildItemBatches(items)
+  retryItems.value = retryBatches.value[0] || []
   nextRetryItems.value = []
   activeIndex.value = 0
+  segmentIndex.value = 0
   phase.value = PHASE_LEARN
   resetChoiceState()
   saveFlowState()
@@ -1111,10 +1137,21 @@ async function startRetryRound(items) {
 }
 
 async function finishRetryRound() {
+  if (segmentIndex.value < retryBatches.value.length - 1) {
+    segmentIndex.value += 1
+    retryItems.value = retryBatches.value[segmentIndex.value] || []
+    activeIndex.value = 0
+    phase.value = PHASE_LEARN
+    resetChoiceState()
+    saveFlowState()
+    await loadCard()
+    return
+  }
   if (nextRetryItems.value.length > 0) {
     await startRetryRound(nextRetryItems.value)
     return
   }
+  retryBatches.value = []
   await moveToNextFlowGroup()
 }
 
@@ -1127,6 +1164,7 @@ async function moveToNextFlowGroup() {
     flowMode.value = FLOW_SEGMENT
     phase.value = PHASE_LEARN
     retryItems.value = []
+    retryBatches.value = []
     nextRetryItems.value = []
     missedItems.value = []
     resetChoiceState()
