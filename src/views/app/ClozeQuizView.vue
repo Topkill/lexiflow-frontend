@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
+import { useAuthStore } from '../../stores/auth'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
@@ -13,6 +14,7 @@ import { lookupWordInWordbook } from '../../api/wordbook'
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
 const loadingTask = ref(false)
 const generating = ref(false)
 const submitting = ref(false)
@@ -63,6 +65,8 @@ const form = reactive({
 const answers = reactive({})
 const CLOZE_DRAFT_STORAGE_PREFIX = 'lexiflow:cloze-draft:'
 const CLOZE_DRAFT_VERSION = 1
+const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
+const CLOZE_FORM_STORAGE_VERSION = 1
 const queryTaskId = computed(() => route.query.taskId || '')
 const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
@@ -211,8 +215,54 @@ function getClozeDraftStorage() {
   }
 }
 
-function clozeDraftStorageKey(quizId = quiz.value?.quizId) {
-  return quizId ? `${CLOZE_DRAFT_STORAGE_PREFIX}${quizId}` : ''
+function getClozeStorageUserId() {
+  return auth.user?.id == null ? '' : String(auth.user.id)
+}
+
+function clozeDraftStorageKey(userId = getClozeStorageUserId(), quizId = quiz.value?.quizId) {
+  return userId && quizId ? `${CLOZE_DRAFT_STORAGE_PREFIX}${userId}:${quizId}` : ''
+}
+
+function clozeFormStorageKey(userId = getClozeStorageUserId()) {
+  return userId ? `${CLOZE_FORM_STORAGE_PREFIX}${userId}` : ''
+}
+
+function normalizeTargetWordCount(value) {
+  const count = Number(value)
+  if (!Number.isFinite(count)) return 10
+  return Math.min(10, Math.max(5, Math.round(count)))
+}
+
+function saveClozeFormPreferences() {
+  const storage = getClozeDraftStorage()
+  const key = clozeFormStorageKey()
+  if (!storage || !key) return
+  try {
+    storage.setItem(key, JSON.stringify({
+      version: CLOZE_FORM_STORAGE_VERSION,
+      targetWordCount: normalizeTargetWordCount(form.targetWordCount),
+      updatedAt: Date.now(),
+    }))
+  } catch {
+    // 本地存储不可用时，不影响生成流程。
+  }
+}
+
+function restoreClozeFormPreferences() {
+  const storage = getClozeDraftStorage()
+  const key = clozeFormStorageKey()
+  if (!storage || !key) return
+  try {
+    const cache = JSON.parse(storage.getItem(key) || 'null')
+    if (!cache || cache.version !== CLOZE_FORM_STORAGE_VERSION) return
+    form.targetWordCount = normalizeTargetWordCount(cache.targetWordCount)
+  } catch {
+    try {
+      storage.removeItem(key)
+    } catch {
+      // 清理失败不影响页面使用。
+    }
+  }
 }
 
 function serializeDraftAnswers() {
@@ -228,7 +278,7 @@ function serializeDraftAnswers() {
 
 function clearClozeDraft(quizId = quiz.value?.quizId) {
   const storage = getClozeDraftStorage()
-  const key = clozeDraftStorageKey(quizId)
+  const key = clozeDraftStorageKey(getClozeStorageUserId(), quizId)
   if (!storage || !key) return
   try {
     storage.removeItem(key)
@@ -1028,6 +1078,17 @@ function normalizeLookupSentences(value) {
 }
 
 watch(
+  () => form.targetWordCount,
+  () => saveClozeFormPreferences()
+)
+
+watch(
+  () => auth.user?.id,
+  () => restoreClozeFormPreferences(),
+  { immediate: true }
+)
+
+watch(
   () => [
     quiz.value?.quizId || '',
     selectedBlankId.value || '',
@@ -1322,7 +1383,21 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="cloze-ai-review-text" :class="`is-${aiReviewState}`">
                   <template v-if="aiReviewState === 'loading' && !aiReviewText">
-                    <span>{{ aiReviewMessage || '正在生成 AI 评阅...' }}</span>
+                    <div class="cloze-ai-review-loading">
+                      <div class="cloze-ai-review-loading-row">
+                        <span class="cloze-ai-review-loading-label">{{ aiReviewMessage || '正在生成 AI 评阅...' }}</span>
+                        <span class="cloze-ai-review-loading-dots" aria-hidden="true">
+                          <i></i>
+                          <i></i>
+                          <i></i>
+                        </span>
+                      </div>
+                      <div class="cloze-ai-review-loading-lines" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </div>
+                    </div>
                   </template>
                   <template v-else-if="aiReviewState === 'failed'">
                     <span>{{ aiReviewError || 'AI 评阅生成失败，请稍后重试。' }}</span>
