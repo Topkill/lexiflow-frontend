@@ -2682,6 +2682,47 @@ body.study-ai-dialog-open .app-main .content-wrap {
   align-items: flex-start;
   color: var(--muted);
   line-height: 1.6;
+  padding: 12px 14px;
+  border: 1px solid rgba(75, 85, 99, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.cloze-result-row.is-correct {
+  border-color: rgba(5, 150, 105, 0.32);
+  background: rgba(236, 253, 245, 0.84);
+}
+
+.cloze-result-row.is-wrong {
+  border-color: rgba(220, 38, 38, 0.46);
+  background: rgba(254, 242, 242, 0.9);
+}
+
+.cloze-result-meta {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cloze-result-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--text);
+}
+
+.cloze-result-label {
+  font-weight: 750;
+}
+
+.cloze-result-reason {
+  color: var(--muted);
+  line-height: 1.7;
+  padding: 8px 10px;
+  border-left: 3px solid rgba(27, 188, 177, 0.38);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .blank-title-row {

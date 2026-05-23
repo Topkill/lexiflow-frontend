@@ -477,6 +477,14 @@ function answerOptionLabel(word) {
   return option ? `${option.label}. ${word}` : word
 }
 
+function blankCorrectDefinition(blankId) {
+  return blankAnswer(blankId)?.correctDefinitionZh || ''
+}
+
+function blankReasonZh(blankId) {
+  return blankAnswer(blankId)?.reasonZh || blankAnswer(blankId)?.explanation || ''
+}
+
 function toggleRevealCorrectAnswers() {
   if (!attempt.value) return
   showCorrectAnswers.value = !showCorrectAnswers.value
@@ -870,17 +878,29 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div v-if="attempt" ref="resultRef" class="cloze-result-list" @mouseup="handlePassageSelectionChange" @keyup="handlePassageSelectionChange">
-                <div v-for="blank in quiz.blanks" :key="`result-${blank.blankId}`" class="cloze-result-row">
+                <div
+                  v-for="blank in quiz.blanks"
+                  :key="`result-${blank.blankId}`"
+                  class="cloze-result-row"
+                  :class="{ 'is-correct': blankAnswer(blank.blankId)?.correct, 'is-wrong': blankAnswer(blank.blankId)?.correct === false }"
+                >
                   <el-icon :class="blankAnswer(blank.blankId)?.correct ? 'result-correct' : 'result-wrong'">
                     <Check v-if="blankAnswer(blank.blankId)?.correct" />
                     <CircleClose v-else />
                   </el-icon>
-                  <span>空格 {{ blank.blankNo }}</span>
-                  <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
-                  <span>正确答案：{{ answerOptionLabel(blankAnswer(blank.blankId)?.correctAnswer) }}</span>
-                  <span v-if="blankAnswer(blank.blankId)?.explanation" class="cloze-explanation">
-                    {{ blankAnswer(blank.blankId).explanation }}
-                  </span>
+                  <div class="cloze-result-meta">
+                    <div class="cloze-result-line">
+                      <span class="cloze-result-label">空格 {{ blank.blankNo }}</span>
+                      <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
+                    </div>
+                    <div class="cloze-result-line">
+                      <span>正确答案：{{ answerOptionLabel(blankAnswer(blank.blankId)?.correctAnswer) }}</span>
+                      <span v-if="blankCorrectDefinition(blank.blankId)">中文释义：{{ blankCorrectDefinition(blank.blankId) }}</span>
+                    </div>
+                    <div v-if="blankReasonZh(blank.blankId)" class="cloze-result-reason">
+                      选择原因：{{ blankReasonZh(blank.blankId) }}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
