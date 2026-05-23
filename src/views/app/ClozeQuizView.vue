@@ -535,6 +535,13 @@ function openClozeAiQuestion(blank) {
   nextTick(() => clozeAiQuestionInputRef.value?.focus?.())
 }
 
+function openFirstClozeAiQuestion() {
+  const firstBlank = (quiz.value?.blanks || []).find((blank) => blank?.wordId)
+  if (firstBlank) {
+    openClozeAiQuestion(firstBlank)
+  }
+}
+
 function insertClozeAiQuestionText(text) {
   const insertText = String(text || '').trim()
   if (!insertText) return
@@ -857,9 +864,19 @@ onBeforeUnmount(() => {
             <template #header>
               <div class="card-header-row">
                 <span>{{ quiz.title || '完形填空练习' }}</span>
-                <el-tag v-if="attempt" :type="attempt.wrongCount ? 'warning' : 'success'">
-                  得分 {{ attempt.score }}
-                </el-tag>
+                <div v-if="attempt" class="cloze-card-actions">
+                  <el-button
+                    plain
+                    :icon="ChatLineRound"
+                    :disabled="!(quiz.blanks || []).some((blank) => blank.wordId)"
+                    @click="openFirstClozeAiQuestion"
+                  >
+                    AI 问答
+                  </el-button>
+                  <el-tag :type="attempt.wrongCount ? 'warning' : 'success'">
+                    得分 {{ attempt.score }}
+                  </el-tag>
+                </div>
               </div>
             </template>
 

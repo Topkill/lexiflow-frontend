@@ -1323,6 +1323,13 @@ body.study-ai-dialog-open .app-main .content-wrap {
   flex-wrap: wrap;
 }
 
+.cloze-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .task-summary,
 .plan-card-body,
 .progress-panel,
