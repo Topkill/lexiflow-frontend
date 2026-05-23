@@ -1513,7 +1513,7 @@ onBeforeUnmount(() => {
                   :disabled="submitting || isChoiceResult"
                   @click="selectChoiceOption(option)"
                 >
-                  <span>{{ option.definition }}</span>
+                  <span>{{ option.pos ? `${option.pos} ${option.definition}` : option.definition }}</span>
                 </button>
               </div>
             </div>
