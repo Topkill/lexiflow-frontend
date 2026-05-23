@@ -10,6 +10,7 @@ import StarterPanel from '../../components/StarterPanel.vue'
 import { askWordQuestion, createClozeTask } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
+import { lookupWordInWordbook } from '../../api/wordbook'
 import { useAuthStore } from '../../stores/auth'
 import {
   cleanupExpiredStudyFlowStates,
@@ -66,8 +67,18 @@ const aiRegenerating = ref(false)
 const aiResult = ref(null)
 const aiQuestion = ref('')
 const aiQuestionInputRef = ref(null)
+const lookupVisible = ref(false)
+const lookupWord = ref('')
+const lookupLoading = ref(false)
+const lookupResult = ref(null)
+const lookupError = ref('')
+const lookupSelectionVisible = ref(false)
+const lookupSelectionText = ref('')
+const lookupSelectionStyle = ref({ top: '0px', left: '0px' })
+const studyCardScrollRef = ref(null)
 const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
+let lookupSelectionRaf = null
 
 const queryTaskId = computed(() => route.query.taskId || '')
 const queryMode = computed(() => route.query.mode || '')
@@ -177,6 +188,16 @@ const cardSentences = computed(() => {
     return []
   }
 })
+const lookupDefinitions = computed(() => {
+  if (!lookupResult.value) return []
+  const fromTrans = normalizeDefinitionEntries(lookupResult.value.trans, lookupResult.value.primaryPos)
+  if (fromTrans.length) return fromTrans
+  const fallback = normalizeLookupText(lookupResult.value.primaryDefinition)
+  return fallback
+    ? [{ key: 'primary-definition', pos: normalizeLookupText(lookupResult.value.primaryPos), definitions: [fallback] }]
+    : []
+})
+const lookupSentences = computed(() => normalizeLookupSentences(lookupResult.value?.sentences).slice(0, 2))
 const choiceQuestion = computed(() => card.value?.choiceQuestion || null)
 const choiceOptions = computed(() => (
   Array.isArray(choiceQuestion.value?.options) ? choiceQuestion.value.options : []
@@ -383,6 +404,150 @@ function highlightExampleText(text = '', word = '', phrase = '') {
   }
   if (!word) return escaped
   return escaped.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), '<mark class="word-highlight">$&</mark>')
+}
+
+function normalizeLookupText(value) {
+  if (value == null || typeof value === 'boolean') return ''
+  return String(value).replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+function normalizeLookupSentences(value) {
+  const parsed = parseJsonLike(value)
+  if (!parsed.valid || !Array.isArray(parsed.value)) return []
+  return parsed.value.map((sentence, index) => {
+    if (typeof sentence === 'string') {
+      const english = normalizeLookupText(sentence)
+      return english ? { key: `sentence-${index}`, english, chinese: '' } : null
+    }
+    if (!sentence || typeof sentence !== 'object') return null
+    const english = normalizeLookupText(sentence.c || sentence.en || sentence.english || sentence.sentence)
+    const chinese = normalizeLookupText(sentence.cn || sentence.zh || sentence.chinese || sentence.translation)
+    return english ? { key: `sentence-${index}-${english}`, english, chinese } : null
+  }).filter(Boolean)
+}
+
+function elementFromSelectionNode(node) {
+  if (!node) return null
+  return node.nodeType === 3 ? node.parentElement : node
+}
+
+function isStudyLookupAllowedElement(element) {
+  const root = studyCardScrollRef.value
+  if (!root || !element || !root.contains(element)) return false
+  if (element.closest('button, .el-button, .phonetic, .choice-question-panel')) return false
+
+  const allowedArea = element.closest('.study-word-title, .definition-block, .example-list')
+  if (!allowedArea || !root.contains(allowedArea)) return false
+  if (recallMode.value && allowedArea.closest('.study-word-title')) return false
+  return true
+}
+
+function buildLookupSelectionStyle(rect) {
+  const buttonWidth = 78
+  const buttonHeight = 34
+  const padding = 8
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1280
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720
+  let left = rect.left + rect.width / 2 - buttonWidth / 2
+  left = Math.max(padding, Math.min(left, viewportWidth - buttonWidth - padding))
+  let top = rect.top - buttonHeight - 8
+  if (top < padding) {
+    top = rect.bottom + 8
+  }
+  top = Math.max(padding, Math.min(top, viewportHeight - buttonHeight - padding))
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+  }
+}
+
+function hideLookupSelection() {
+  lookupSelectionVisible.value = false
+  lookupSelectionText.value = ''
+}
+
+function updateLookupSelection() {
+  const selection = window.getSelection?.()
+  if (!selection || selection.isCollapsed || !selection.rangeCount) {
+    hideLookupSelection()
+    return
+  }
+
+  const range = selection.getRangeAt(0)
+  const startElement = elementFromSelectionNode(range.startContainer)
+  const endElement = elementFromSelectionNode(range.endContainer)
+  if (!isStudyLookupAllowedElement(startElement) || !isStudyLookupAllowedElement(endElement)) {
+    hideLookupSelection()
+    return
+  }
+
+  const text = normalizeLookupText(selection.toString())
+  if (!text) {
+    hideLookupSelection()
+    return
+  }
+
+  const rect = range.getBoundingClientRect()
+  if (!rect || (!rect.width && !rect.height)) {
+    hideLookupSelection()
+    return
+  }
+
+  lookupSelectionText.value = text
+  lookupSelectionStyle.value = buildLookupSelectionStyle(rect)
+  lookupSelectionVisible.value = true
+}
+
+function scheduleLookupSelectionUpdate() {
+  if (lookupSelectionRaf) {
+    window.cancelAnimationFrame(lookupSelectionRaf)
+  }
+  lookupSelectionRaf = window.requestAnimationFrame(() => {
+    lookupSelectionRaf = null
+    updateLookupSelection()
+  })
+}
+
+function handleStudySelectionChange() {
+  scheduleLookupSelectionUpdate()
+}
+
+function handleLookupSelectionLookup() {
+  if (!lookupSelectionText.value) return
+  lookupByRawWord(lookupSelectionText.value)
+}
+
+async function lookupByRawWord(rawWord) {
+  const word = normalizeLookupText(rawWord)
+  if (!word) return
+  if (!card.value?.wordbookId) {
+    ElMessage.warning('当前卡片缺少词库信息，暂时无法查词')
+    return
+  }
+  hideLookupSelection()
+  lookupVisible.value = true
+  lookupWord.value = word
+  lookupResult.value = null
+  lookupError.value = ''
+  lookupLoading.value = true
+  try {
+    lookupResult.value = await lookupWordInWordbook(card.value.wordbookId, word)
+    lookupError.value = lookupResult.value ? '' : '未找到该单词或词组'
+  } catch (error) {
+    lookupError.value = error?.code === 20002 || error?.code === 10002 || error?.code === 404
+      ? '未找到该单词或词组'
+      : (error?.message || '查词失败，请稍后重试')
+  } finally {
+    lookupLoading.value = false
+  }
+}
+
+function closeLookup() {
+  lookupVisible.value = false
+  lookupWord.value = ''
+  lookupResult.value = null
+  lookupError.value = ''
+  lookupLoading.value = false
 }
 
 function buildItemBatches(items) {
@@ -727,6 +892,8 @@ function resetLocalFlow(persist = true) {
 
 async function loadCard() {
   stopPronunciation()
+  hideLookupSelection()
+  closeLookup()
   if (!currentItem.value) {
     card.value = null
     cardLoading.value = false
@@ -1129,6 +1296,12 @@ watch(queryTaskId, (nextTaskId, previousTaskId) => {
 onMounted(loadTask)
 onBeforeUnmount(() => {
   stopPronunciation()
+  if (lookupSelectionRaf) {
+    window.cancelAnimationFrame(lookupSelectionRaf)
+    lookupSelectionRaf = null
+  }
+  closeLookup()
+  hideLookupSelection()
   toggleAiDialogBodyClass(false)
 })
 </script>
@@ -1199,7 +1372,13 @@ onBeforeUnmount(() => {
           <el-skeleton animated :rows="6" />
         </div>
 
-        <div v-else class="study-card-scroll">
+        <div
+          v-else
+          ref="studyCardScrollRef"
+          class="study-card-scroll"
+          @mouseup="handleStudySelectionChange"
+          @keyup="handleStudySelectionChange"
+        >
           <div class="study-word-title">
             <h1>{{ card.word }}</h1>
           </div>
@@ -1303,6 +1482,17 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
+        <button
+          v-if="lookupSelectionVisible"
+          class="cloze-lookup-float"
+          type="button"
+          :style="lookupSelectionStyle"
+          @mousedown.prevent
+          @click="handleLookupSelectionLookup"
+        >
+          查词
+        </button>
+
         <div v-if="learningMode && card" class="feedback-row">
           <el-button size="large" type="primary" :loading="submitting || generatingCloze" :disabled="submitting || generatingCloze" @click="goNextLearnCard">
             {{ learnActionLabel }}
@@ -1334,6 +1524,44 @@ onBeforeUnmount(() => {
         <el-progress :percentage="studyCompletionRate" :show-text="false" />
       </el-card>
     </div>
+
+    <el-dialog v-model="lookupVisible" class="cloze-lookup-dialog" width="420px" append-to-body @closed="closeLookup">
+      <template #header>
+        <div class="cloze-lookup-header">
+          <strong>{{ lookupResult?.word || lookupWord }}</strong>
+          <span v-if="lookupResult?.normalizedWord && lookupResult.normalizedWord !== lookupResult.word">
+            {{ lookupResult.normalizedWord }}
+          </span>
+        </div>
+      </template>
+
+      <el-skeleton v-if="lookupLoading" :rows="4" animated />
+      <el-empty v-else-if="lookupError" :description="lookupError" :image-size="72" />
+      <div v-else-if="lookupResult" class="cloze-lookup-content">
+        <div v-if="lookupResult.phonetic0 || lookupResult.phonetic1" class="cloze-lookup-phonetics">
+          <span v-if="lookupResult.phonetic0">英 {{ lookupResult.phonetic0 }}</span>
+          <span v-if="lookupResult.phonetic1">美 {{ lookupResult.phonetic1 }}</span>
+        </div>
+
+        <div v-if="lookupDefinitions.length" class="cloze-lookup-section">
+          <div v-for="definition in lookupDefinitions" :key="definition.key" class="cloze-lookup-definition">
+            <span v-if="definition.pos">{{ definition.pos }}</span>
+            <p>{{ definition.definitions.join('；') }}</p>
+          </div>
+        </div>
+
+        <div v-if="lookupSentences.length" class="cloze-lookup-section">
+          <div v-for="sentence in lookupSentences" :key="sentence.key" class="cloze-lookup-sentence">
+            <p>{{ sentence.english }}</p>
+            <span v-if="sentence.chinese">{{ sentence.chinese }}</span>
+          </div>
+        </div>
+
+        <p v-if="!lookupDefinitions.length && !lookupSentences.length" class="cloze-lookup-muted">
+          暂无更多释义或例句信息。
+        </p>
+      </div>
+    </el-dialog>
 
     <el-dialog v-model="aiDialogVisible" title="AI 单词问答" width="680px">
       <div class="ai-question-box">

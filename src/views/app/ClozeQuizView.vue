@@ -32,6 +32,7 @@ const lookupSelectionVisible = ref(false)
 const lookupSelectionText = ref('')
 const lookupSelectionStyle = ref({ top: '0px', left: '0px' })
 const passageRef = ref(null)
+const resultRef = ref(null)
 let clozeClickTimer = null
 let lookupSelectionRaf = null
 const form = reactive({
@@ -497,8 +498,9 @@ function scheduleLookupSelectionUpdate() {
 
 function updateLookupSelection() {
   const passage = passageRef.value
+  const result = resultRef.value
   const selection = window.getSelection?.()
-  if (!passage || !selection || selection.isCollapsed || !selection.rangeCount) {
+  if ((!passage && !result) || !selection || selection.isCollapsed || !selection.rangeCount) {
     hideLookupSelection()
     return
   }
@@ -507,7 +509,8 @@ function updateLookupSelection() {
   const commonAncestor = range.commonAncestorContainer?.nodeType === 3
     ? range.commonAncestorContainer.parentElement
     : range.commonAncestorContainer
-  if (!commonAncestor || !passage.contains(commonAncestor)) {
+  const withinLookupArea = (passage && passage.contains(commonAncestor)) || (result && result.contains(commonAncestor))
+  if (!commonAncestor || !withinLookupArea) {
     hideLookupSelection()
     return
   }
@@ -866,7 +869,7 @@ onBeforeUnmount(() => {
                   <el-button v-if="hasFilledAnswers" text @click="clearAllAnswers">全部清空</el-button>
                 </div>
               </div>
-              <div v-if="attempt" class="cloze-result-list">
+              <div v-if="attempt" ref="resultRef" class="cloze-result-list" @mouseup="handlePassageSelectionChange" @keyup="handlePassageSelectionChange">
                 <div v-for="blank in quiz.blanks" :key="`result-${blank.blankId}`" class="cloze-result-row">
                   <el-icon :class="blankAnswer(blank.blankId)?.correct ? 'result-correct' : 'result-wrong'">
                     <Check v-if="blankAnswer(blank.blankId)?.correct" />
