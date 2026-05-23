@@ -453,10 +453,17 @@ function applyAiReviewResponse(review) {
 function normalizeAiReviewMarkdown(text) {
   const trimmed = String(text || '').trim()
   if (!trimmed) return ''
-  return trimmed
+  return normalizeAiReviewMixedTextSpacing(trimmed)
     .replace(/^#{1,3}\s*AI\s*评阅\s*\n+/i, '')
     .replace(/^AI\s*评阅\s*\n+/i, '')
     .replace(/\n{3,}/g, '\n\n')
+}
+
+function normalizeAiReviewMixedTextSpacing(text) {
+  return text
+    .replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2')
+    .replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, '$1 $2')
+    .replace(/[ \t]{2,}/g, ' ')
 }
 
 async function startAiReviewStream(attemptId, regenerate = false) {

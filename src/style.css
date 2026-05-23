@@ -2816,56 +2816,88 @@ body.study-ai-dialog-open .app-main .content-wrap {
   border: 0;
   background: transparent;
   white-space: normal;
-}
-
-.cloze-ai-review-markdown :where(h1, h2, h3, h4) {
-  margin: 14px 0 6px;
   color: var(--text);
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.84;
 }
 
-.cloze-ai-review-markdown :where(h1, h2, h3, h4):first-child,
-.cloze-ai-review-markdown :where(p, ul, ol, blockquote, pre):first-child {
-  margin-top: 0;
+.cloze-ai-review-markdown :where(h2, h3, h4) {
+  color: var(--text);
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.cloze-ai-review-markdown h2 {
+  margin: 16px 0 10px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.cloze-ai-review-markdown h3 {
+  margin: 14px 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cloze-ai-review-markdown h4 {
+  margin: 12px 0 6px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .cloze-ai-review-markdown :where(p, ul, ol, blockquote, pre) {
-  margin: 6px 0;
+  margin: 8px 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.cloze-ai-review-markdown :where(h2, h3, h4, p, ul, ol, blockquote, pre):first-child {
+  margin-top: 0;
 }
 
 .cloze-ai-review-markdown :where(ul, ol) {
-  padding-left: 20px;
+  margin-left: 0;
+  padding-left: 22px;
 }
 
 .cloze-ai-review-markdown li + li {
-  margin-top: 3px;
+  margin-top: 4px;
+}
+
+.cloze-ai-review-markdown li {
+  overflow-wrap: anywhere;
 }
 
 .cloze-ai-review-markdown strong {
   color: var(--text);
+  font-weight: 700;
 }
 
 .cloze-ai-review-markdown blockquote {
-  padding-left: 12px;
-  border-left: 3px solid rgba(27, 188, 177, 0.42);
+  margin-left: 0;
+  padding: 10px 14px;
+  border-left: 4px solid rgba(27, 188, 177, 0.42);
+  border-radius: 6px;
+  background: rgba(27, 188, 177, 0.06);
   color: var(--muted);
 }
 
 .cloze-ai-review-markdown code {
-  padding: 2px 5px;
-  border-radius: 5px;
-  background: rgba(15, 23, 42, 0.06);
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.07);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.92em;
 }
 
 .cloze-ai-review-markdown pre {
   overflow: auto;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
   background: rgba(15, 23, 42, 0.06);
   white-space: pre-wrap;
+  line-height: 1.7;
 }
 
 .cloze-ai-review-markdown pre code {
