@@ -2731,10 +2731,15 @@ body.study-ai-dialog-open .app-main .content-wrap {
   flex-wrap: wrap;
   gap: 12px;
   color: var(--text);
+  align-items: center;
 }
 
 .cloze-result-label {
   font-weight: 750;
+}
+
+.cloze-result-ai-button {
+  margin-left: auto;
 }
 
 .cloze-result-reason {

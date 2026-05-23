@@ -1,12 +1,12 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Calendar, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
-import { createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
+import { askWordQuestion, createClozeTask, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
 
@@ -33,6 +33,13 @@ const lookupSelectionText = ref('')
 const lookupSelectionStyle = ref({ top: '0px', left: '0px' })
 const passageRef = ref(null)
 const resultRef = ref(null)
+const clozeAiDialogVisible = ref(false)
+const clozeAiLoading = ref(false)
+const clozeAiRegenerating = ref(false)
+const clozeAiQuestion = ref('')
+const clozeAiResult = ref(null)
+const clozeAiTarget = ref(null)
+const clozeAiQuestionInputRef = ref(null)
 let clozeClickTimer = null
 let lookupSelectionRaf = null
 const form = reactive({
@@ -516,6 +523,65 @@ function formatDefinitionGroup(group) {
   return pos || text
 }
 
+function openClozeAiQuestion(blank) {
+  if (!blank?.wordId || !blank?.blankNo) return
+  clozeAiTarget.value = {
+    ...blank,
+    word: blankAnswer(blank.blankId)?.correctAnswer || '',
+  }
+  clozeAiQuestion.value = `请结合这道完形填空的答案解析，解释空格 ${blank.blankNo} 为什么选这个词。`
+  clozeAiResult.value = null
+  clozeAiDialogVisible.value = true
+  nextTick(() => clozeAiQuestionInputRef.value?.focus?.())
+}
+
+function insertClozeAiQuestionText(text) {
+  const insertText = String(text || '').trim()
+  if (!insertText) return
+  clozeAiQuestion.value = clozeAiQuestion.value ? `${clozeAiQuestion.value} ${insertText}`.trim() : insertText
+  nextTick(() => clozeAiQuestionInputRef.value?.focus?.())
+}
+
+function closeClozeAiDialog() {
+  clozeAiDialogVisible.value = false
+  clozeAiLoading.value = false
+  clozeAiRegenerating.value = false
+}
+
+async function askClozeAi(regenerate = false) {
+  if (!clozeAiTarget.value?.wordId || !quiz.value?.wordbookId || clozeAiLoading.value || clozeAiRegenerating.value) return
+  const question = clozeAiQuestion.value.trim()
+  if (!question) {
+    ElMessage.warning('请输入你想问的问题')
+    return
+  }
+  clozeAiLoading.value = !regenerate
+  clozeAiRegenerating.value = regenerate
+  try {
+    clozeAiResult.value = await askWordQuestion(
+      clozeAiTarget.value.wordId,
+      {
+        wordbookId: quiz.value.wordbookId,
+        question,
+        regenerate,
+      },
+      { silentError: true },
+    )
+  } catch (error) {
+    ElMessage.warning(error.code === 40001
+      ? 'AI 配置不可用，请先检查公共配置或私有配置。'
+      : 'AI 问答暂时不可用，请稍后重试。')
+  } finally {
+    clozeAiLoading.value = false
+    clozeAiRegenerating.value = false
+  }
+}
+
+function useClozeFollowUp(question) {
+  clozeAiQuestion.value = question
+  askClozeAi(false)
+}
+
 function toggleRevealCorrectAnswers() {
   if (!attempt.value) return
   showCorrectAnswers.value = !showCorrectAnswers.value
@@ -928,6 +994,16 @@ onBeforeUnmount(() => {
                     <div class="cloze-result-line">
                       <span class="cloze-result-label">空格 {{ blank.blankNo }}</span>
                       <span>你的答案：{{ blankAnswer(blank.blankId)?.userAnswer || '未作答' }}</span>
+                      <el-button
+                        v-if="blank.wordId"
+                        size="small"
+                        plain
+                        :icon="ChatLineRound"
+                        class="cloze-result-ai-button"
+                        @click="openClozeAiQuestion(blank)"
+                      >
+                        AI 问答
+                      </el-button>
                     </div>
                     <div class="cloze-result-line">
                       <span>正确答案：{{ blankCorrectAnswerLabel(blank.blankId) }}</span>
@@ -1017,6 +1093,68 @@ onBeforeUnmount(() => {
           暂无更多释义或例句信息。
         </p>
       </div>
+    </el-dialog>
+
+    <el-dialog
+      v-model="clozeAiDialogVisible"
+      title="AI 问答"
+      width="680px"
+      @closed="closeClozeAiDialog"
+    >
+      <div class="ai-question-box">
+        <div class="ai-question-word">
+          <el-tooltip content="点击插入" effect="light" placement="top">
+            <el-tag @click="insertClozeAiQuestionText(clozeAiTarget?.word)">{{ clozeAiTarget?.word }}</el-tag>
+          </el-tooltip>
+          <span v-if="clozeAiTarget">空格 {{ clozeAiTarget.blankNo }}</span>
+        </div>
+        <el-input
+          ref="clozeAiQuestionInputRef"
+          v-model.trim="clozeAiQuestion"
+          type="textarea"
+          :rows="3"
+          maxlength="500"
+          show-word-limit
+          placeholder="输入你对这道解析的疑问，例如：为什么这里不用另一个词性？"
+        />
+        <div class="button-row">
+          <el-button :icon="Refresh" @click="closeClozeAiDialog">关闭</el-button>
+          <el-button type="primary" :loading="clozeAiLoading" :disabled="clozeAiLoading || clozeAiRegenerating" @click="askClozeAi(false)">提问</el-button>
+        </div>
+      </div>
+
+      <el-skeleton v-if="clozeAiLoading" :rows="5" animated />
+      <template v-else-if="clozeAiResult?.content">
+        <div class="ai-content-panel">
+          <div class="card-header-row">
+            <el-tag :type="clozeAiResult.cacheHit ? 'success' : 'info'">{{ clozeAiResult.cacheHit ? '缓存命中' : '新生成' }}</el-tag>
+            <el-button size="small" :icon="Refresh" :loading="clozeAiRegenerating" :disabled="clozeAiLoading || clozeAiRegenerating" @click="askClozeAi(true)">重新回答</el-button>
+          </div>
+
+          <p class="ai-brief">{{ clozeAiResult.content.answer }}</p>
+          <div v-if="clozeAiResult.content.keyPoints?.length" class="ai-section">
+            <h3>要点</h3>
+            <ul><li v-for="item in clozeAiResult.content.keyPoints" :key="item">{{ item }}</li></ul>
+          </div>
+          <div v-if="clozeAiResult.content.relatedWords?.length" class="ai-section">
+            <h3>相关词</h3>
+            <div class="ai-tag-row">
+              <el-tag v-for="item in clozeAiResult.content.relatedWords" :key="item" effect="plain">{{ item }}</el-tag>
+            </div>
+          </div>
+          <div v-if="clozeAiResult.content.followUps?.length" class="ai-section">
+            <h3>继续追问</h3>
+            <div class="ai-follow-row">
+              <el-button v-for="item in clozeAiResult.content.followUps" :key="item" size="small" plain @click="useClozeFollowUp(item)">
+                {{ item }}
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </template>
+      <EmptyState v-else title="还没有提问" description="可以针对这道答案解析继续追问。比如：为什么这里选这个词、这个词性怎么判断。">
+        <el-button type="primary" :loading="clozeAiLoading" :disabled="clozeAiLoading || clozeAiRegenerating" @click="askClozeAi(false)">开始提问</el-button>
+      </EmptyState>
     </el-dialog>
   </section>
 </template>
