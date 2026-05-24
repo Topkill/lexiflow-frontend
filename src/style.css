@@ -2214,7 +2214,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
 .ai-answer-markdown strong {
   font-weight: 800;
-  color: #0b5f59;
+  color: var(--text);
 }
 
 .ai-answer-markdown code {
@@ -2228,7 +2228,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
 .ai-section li strong {
   font-weight: 800;
-  color: #0b5f59;
+  color: var(--text);
 }
 
 .ai-section li code {

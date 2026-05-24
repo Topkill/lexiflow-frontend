@@ -430,8 +430,8 @@ function normalizeAiMarkdownText(value) {
   if (value == null || typeof value === 'boolean') return ''
   return String(value)
     .trim()
-    .replace(/([\u4e00-\u9fff])([A-Za-z0-9`*])/g, '$1 $2')
-    .replace(/([A-Za-z0-9`*])([\u4e00-\u9fff])/g, '$1 $2')
+    .replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2')
+    .replace(/([A-Za-z0-9])([\u4e00-\u9fff])/g, '$1 $2')
     .replace(/[ \t]{2,}/g, ' ')
 }
 
