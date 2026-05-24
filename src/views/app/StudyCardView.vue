@@ -33,6 +33,7 @@ const ITEM_TYPE_REVIEW = 'REVIEW'
 const ITEM_TYPE_EXTRA = 'EXTRA'
 const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 const SEGMENT_SPLIT_THRESHOLD = 10
+const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 
 const router = useRouter()
 const route = useRoute()
@@ -1233,11 +1234,14 @@ async function generateCompletedGroupCloze(taskId, extraQuery = {}) {
     }
   } catch (error) {
     await loadTask()
+    const quotaExhausted = error.code === 40002 || error.status === 429 || error.message?.includes('配额')
     const message = error.code === 40001
       ? '今日学习已完成，但 AI 配置不可用。可以先去 AI 配置页检查。'
-      : '今日学习已完成，但完形填空暂时生成失败。可以稍后在完形填空页重试。'
+      : quotaExhausted
+        ? `今日学习已完成，但 ${AI_QUOTA_EXHAUSTED_MESSAGE}。可以稍后在完形填空页重试。`
+        : '今日学习已完成，但完形填空暂时生成失败。可以稍后在完形填空页重试。'
     ElMessage.warning(message)
-    router.push({ path: '/app/cloze', query: { generateError: error.code === 40001 ? 'config' : 'ai' } })
+    router.push({ path: '/app/cloze', query: { generateError: error.code === 40001 ? 'config' : (quotaExhausted ? 'quota' : 'ai') } })
   } finally {
     generatingCloze.value = false
   }

@@ -67,6 +67,8 @@ const CLOZE_DRAFT_STORAGE_PREFIX = 'lexiflow:cloze-draft:'
 const CLOZE_DRAFT_VERSION = 1
 const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
 const CLOZE_FORM_STORAGE_VERSION = 1
+const AI_QUOTA_EXHAUSTED_CODE = 40002
+const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 const queryTaskId = computed(() => route.query.taskId || '')
 const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
@@ -360,9 +362,23 @@ function applyAttemptAnswers(attemptResult) {
 function applyRouteGenerateError() {
   if (route.query.generateError === 'config') {
     generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
+  } else if (route.query.generateError === 'quota') {
+    generateError.value = AI_QUOTA_EXHAUSTED_MESSAGE
   } else if (route.query.generateError === 'ai') {
     generateError.value = 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。'
   }
+}
+
+function isAiQuotaExhausted(errorOrData) {
+  const message = String(errorOrData?.message || errorOrData?.errorMessage || errorOrData || '')
+  return errorOrData?.code === AI_QUOTA_EXHAUSTED_CODE
+    || errorOrData?.status === 429
+    || message.includes('公共 AI 调用配额不足')
+    || message.includes(AI_QUOTA_EXHAUSTED_MESSAGE)
+}
+
+function normalizeAiQuotaMessage(errorOrData, fallback) {
+  return isAiQuotaExhausted(errorOrData) ? AI_QUOTA_EXHAUSTED_MESSAGE : fallback
 }
 
 async function generateQuiz() {
@@ -394,9 +410,11 @@ async function generateQuiz() {
     router.replace({ path: '/app/cloze', query: { quizId } })
     ElMessage.success('练习已生成')
   } catch (error) {
-    generateError.value = error.code === 40001
-      ? 'AI 配置不可用，请先检查公共配置或私有配置。'
-      : 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。'
+    if (error.code === 40001) {
+      generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
+    } else {
+      generateError.value = normalizeAiQuotaMessage(error, 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。')
+    }
   } finally {
     generating.value = false
   }
@@ -491,7 +509,7 @@ function applyAiReviewResponse(review) {
   }
   if (review.status === 'FAILED') {
     aiReviewState.value = 'failed'
-    aiReviewError.value = review.errorMessage || 'AI 评阅生成失败，请稍后重试'
+    aiReviewError.value = normalizeAiQuotaMessage(review, review.errorMessage || 'AI 评阅生成失败，请稍后重试')
     return false
   }
   if (review.status === 'RUNNING') {
@@ -539,7 +557,7 @@ async function startAiReviewStream(attemptId, regenerate = false) {
       credentials: 'include',
     })
     if (!response.ok || !response.body) {
-      throw new Error(await readAiReviewStreamError(response))
+      throw await readAiReviewStreamError(response)
     }
     await readAiReviewSse(response)
     if (['loading', 'streaming'].includes(aiReviewState.value)) {
@@ -548,7 +566,7 @@ async function startAiReviewStream(attemptId, regenerate = false) {
   } catch (error) {
     if (controller.signal.aborted) return
     aiReviewState.value = 'failed'
-    aiReviewError.value = error?.message || 'AI 评阅生成失败，请稍后重试'
+    aiReviewError.value = normalizeAiQuotaMessage(error, error?.message || 'AI 评阅生成失败，请稍后重试')
   } finally {
     if (aiReviewAbortController === controller) {
       aiReviewAbortController = null
@@ -579,9 +597,14 @@ async function readAiReviewStreamError(response) {
   try {
     const text = await response.text()
     const body = JSON.parse(text)
-    return body?.message || `AI 评阅请求失败（${response.status}）`
+    const error = new Error(body?.message || `AI 评阅请求失败（${response.status}）`)
+    error.code = body?.code
+    error.status = response.status
+    return error
   } catch {
-    return `AI 评阅请求失败（${response.status}）`
+    const error = new Error(`AI 评阅请求失败（${response.status}）`)
+    error.status = response.status
+    return error
   }
 }
 
@@ -662,7 +685,7 @@ function handleAiReviewSseEvent(event, data) {
   }
   if (event === 'error') {
     aiReviewState.value = 'failed'
-    aiReviewError.value = data?.message || 'AI 评阅生成失败，请稍后重试'
+    aiReviewError.value = normalizeAiQuotaMessage(data, data?.message || 'AI 评阅生成失败，请稍后重试')
   }
 }
 
