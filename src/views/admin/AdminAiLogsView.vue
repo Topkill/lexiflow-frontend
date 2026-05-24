@@ -8,6 +8,11 @@ import { fetchAdminAiLogs } from '../../api/admin'
 const scopeOptions = ['PUBLIC', 'PRIVATE']
 const statusOptions = ['SUCCESS', 'FAILED']
 const contentTypeOptions = ['WORD_QA', 'CLOZE', 'REPORT', 'EXPLANATION', 'EXAMPLES', 'MNEMONIC']
+const promptFeatureLabels = {
+  WORD_QA: 'AI 问答',
+  CLOZE_QUIZ: 'AI 完形填空',
+  CLOZE_REVIEW: 'AI 评阅',
+}
 
 const loading = ref(false)
 const detailVisible = ref(false)
@@ -30,6 +35,21 @@ function queryParams() {
 
 function statusTagType(status) {
   return status === 'SUCCESS' ? 'success' : 'danger'
+}
+
+function promptFieldText(value) {
+  return value || '未记录'
+}
+
+function promptFeatureText(value) {
+  return promptFeatureLabels[value] || promptFieldText(value)
+}
+
+function promptTemplateIdText(log) {
+  if (log.promptTemplateId) {
+    return log.promptTemplateId
+  }
+  return log.promptFeatureType && log.promptTemplateName ? '内置默认' : '未记录'
 }
 
 async function loadData() {
@@ -99,8 +119,16 @@ onMounted(loadData)
       <template v-else>
         <el-table :data="page.records">
           <el-table-column prop="contentType" label="类型" width="160" />
-          <el-table-column prop="promptFeatureType" label="提示词功能" width="140" />
-          <el-table-column prop="promptTemplateName" label="提示词模板" min-width="180" show-overflow-tooltip />
+          <el-table-column label="提示词功能" width="140">
+            <template #default="{ row }">
+              {{ promptFeatureText(row.promptFeatureType) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="提示词模板" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ promptFieldText(row.promptTemplateName) }}
+            </template>
+          </el-table-column>
           <el-table-column prop="configScope" label="配置" width="100" />
           <el-table-column prop="modelName" label="模型" min-width="160" show-overflow-tooltip />
           <el-table-column prop="status" label="状态" width="100">
@@ -139,9 +167,9 @@ onMounted(loadData)
           <el-descriptions-item label="日志 ID">{{ currentLog.id }}</el-descriptions-item>
           <el-descriptions-item label="用户 ID">{{ currentLog.userId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="内容类型">{{ currentLog.contentType }}</el-descriptions-item>
-          <el-descriptions-item label="提示词功能">{{ currentLog.promptFeatureType || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="提示词模板">{{ currentLog.promptTemplateName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="提示词模板 ID">{{ currentLog.promptTemplateId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="提示词功能">{{ promptFeatureText(currentLog.promptFeatureType) }}</el-descriptions-item>
+          <el-descriptions-item label="提示词模板">{{ promptFieldText(currentLog.promptTemplateName) }}</el-descriptions-item>
+          <el-descriptions-item label="提示词模板 ID">{{ promptTemplateIdText(currentLog) }}</el-descriptions-item>
           <el-descriptions-item label="配置来源">{{ currentLog.configScope }}</el-descriptions-item>
           <el-descriptions-item label="模型">{{ currentLog.modelName }}</el-descriptions-item>
           <el-descriptions-item label="API Base URL">{{ currentLog.apiBaseUrl }}</el-descriptions-item>
