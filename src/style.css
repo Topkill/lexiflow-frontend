@@ -2195,6 +2195,51 @@ body.study-ai-dialog-open .app-main .content-wrap {
   line-height: 1.75;
 }
 
+.ai-answer-markdown {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.ai-answer-markdown :where(p, ul, ol, blockquote, pre) {
+  margin: 0 0 10px;
+}
+
+.ai-answer-markdown :where(p, ul, ol, blockquote, pre):last-child {
+  margin-bottom: 0;
+}
+
+.ai-answer-markdown :where(ul, ol) {
+  padding-left: 20px;
+}
+
+.ai-answer-markdown strong {
+  font-weight: 800;
+  color: #0b5f59;
+}
+
+.ai-answer-markdown code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(45, 130, 122, 0.12);
+  color: #0f766e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.94em;
+}
+
+.ai-section li strong {
+  font-weight: 800;
+  color: #0b5f59;
+}
+
+.ai-section li code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(45, 130, 122, 0.12);
+  color: #0f766e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.94em;
+}
+
 .ai-section,
 .ai-example-item {
   padding: 14px;

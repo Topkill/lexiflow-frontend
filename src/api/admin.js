@@ -142,6 +142,10 @@ export function copyBuiltinAdminAiPromptTemplate(featureType) {
   return http.post(`/api/v1/admin/ai/prompt-templates/builtin/${featureType}/copy`)
 }
 
+export function deleteAdminAiPromptTemplate(templateId) {
+  return http.delete(`/api/v1/admin/ai/prompt-templates/${templateId}`)
+}
+
 export function bindAdminAiPromptFeature(featureType, payload) {
   return http.put(`/api/v1/admin/ai/prompt-features/${featureType}/binding`, payload)
 }

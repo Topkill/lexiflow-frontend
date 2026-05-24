@@ -3,11 +3,12 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Calendar, ChatLineRound, Cpu, Refresh } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
 import LexiIcon from '../../components/LexiIcon.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
-import { askWordQuestion, createClozeTask } from '../../api/ai'
+import { createClozeTask, streamWordQuestion } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
@@ -66,9 +67,15 @@ const needsPlan = ref(false)
 const aiDialogVisible = ref(false)
 const aiLoading = ref(false)
 const aiRegenerating = ref(false)
+const aiStreaming = ref(false)
 const aiResult = ref(null)
 const aiQuestion = ref('')
 const aiQuestionInputRef = ref(null)
+const aiMarkdown = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+})
 const lookupVisible = ref(false)
 const lookupWord = ref('')
 const lookupLoading = ref(false)
@@ -81,6 +88,7 @@ const studyCardScrollRef = ref(null)
 const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
 let lookupSelectionRaf = null
+let aiAbortController = null
 
 const queryTaskId = computed(() => route.query.taskId || '')
 const queryMode = computed(() => route.query.mode || '')
@@ -159,6 +167,10 @@ const flowHint = computed(() => {
   return learningMode.value ? '先快速理解本段单词，随后会折叠中文释义做轻量回忆。' : '现在只看英文信息，确认自己能不能想起中文意思。'
 })
 const aiQuestionPlaceholder = computed(() => card.value?.word ? `例如：${card.value.word} 的反义词有哪些？` : '例如：这个词的反义词有哪些？')
+const aiAnswerHtml = computed(() => {
+  const answer = normalizeAiMarkdownText(aiResult.value?.content?.answer)
+  return answer ? aiMarkdown.render(answer) : ''
+})
 const cardDefinitions = computed(() => {
   const transDefinitions = normalizeDefinitionEntries(card.value?.trans, card.value?.primaryPos)
   if (transDefinitions.length) return transDefinitions
@@ -411,6 +423,20 @@ function highlightExampleText(text = '', word = '', phrase = '') {
 function normalizeLookupText(value) {
   if (value == null || typeof value === 'boolean') return ''
   return String(value).replace(/[’']/g, "'").replace(/\s+/g, ' ').trim()
+}
+
+function normalizeAiMarkdownText(value) {
+  if (value == null || typeof value === 'boolean') return ''
+  return String(value)
+    .trim()
+    .replace(/([\u4e00-\u9fff])([A-Za-z0-9`*])/g, '$1 $2')
+    .replace(/([A-Za-z0-9`*])([\u4e00-\u9fff])/g, '$1 $2')
+    .replace(/[ \t]{2,}/g, ' ')
+}
+
+function renderAiInlineMarkdown(value) {
+  const text = normalizeAiMarkdownText(value)
+  return text ? aiMarkdown.renderInline(text) : ''
 }
 
 function normalizeLookupSentences(value) {
@@ -1291,31 +1317,80 @@ function insertQuestionText(text) {
 }
 
 async function askAi(regenerate = false) {
-  if (!card.value?.wordId || !card.value?.wordbookId || aiLoading.value || aiRegenerating.value) return
+  if (!card.value?.wordId || !card.value?.wordbookId || aiLoading.value || aiRegenerating.value || aiStreaming.value) return
   const question = aiQuestion.value.trim()
   if (!question) {
     ElMessage.warning('请输入你想问的问题')
     return
   }
+  const wordId = card.value.wordId
+  const wordbookId = card.value.wordbookId
+  if (aiAbortController) {
+    aiAbortController.abort()
+  }
+  aiAbortController = new AbortController()
   aiLoading.value = !regenerate
   aiRegenerating.value = regenerate
+  aiStreaming.value = true
+  aiResult.value = {
+    cacheHit: false,
+    contentType: 'WORD_QA',
+    wordId: String(wordId),
+    wordbookId: String(wordbookId),
+    content: {
+      answer: '',
+      keyPoints: [],
+      relatedWords: [],
+      followUps: [],
+    },
+  }
   try {
-    aiResult.value = await askWordQuestion(
-      card.value.wordId,
+    const finalPayload = await streamWordQuestion(
+      wordId,
       {
-        wordbookId: card.value.wordbookId,
+        wordbookId,
         question,
         regenerate,
       },
-      { silentError: true },
+      {
+        signal: aiAbortController.signal,
+        onStatus: (status) => {
+          if (status?.status === 'CACHE_HIT') {
+            aiResult.value.cacheHit = true
+          }
+        },
+        onChunk: (text) => {
+          aiLoading.value = false
+          if (!text) return
+          aiResult.value.content.answer += text
+        },
+        onDone: (payload) => {
+          if (payload?.content) {
+            aiResult.value = payload
+          }
+          aiLoading.value = false
+          aiRegenerating.value = false
+          aiStreaming.value = false
+        },
+      },
     )
+    if (finalPayload?.content) {
+      aiResult.value = finalPayload
+    }
   } catch (error) {
-    ElMessage.warning(error.code === 40001
-      ? 'AI 配置不可用，请先检查公共配置或私有配置。'
-      : 'AI 问答暂时不可用，请稍后重试。')
+    if (error?.name === 'AbortError') return
+    if (error.code === 40001 || error.message?.includes('AI 配置')) {
+      ElMessage.warning('AI 配置不可用，请先检查公共配置或私有配置。')
+    } else if (error.code === 40002 || error.status === 429 || error.message?.includes('配额')) {
+      ElMessage.warning('今日公共 AI 调用次数已用完')
+    } else {
+      ElMessage.warning(error.message || 'AI 问答暂时不可用，请稍后重试。')
+    }
   } finally {
     aiLoading.value = false
     aiRegenerating.value = false
+    aiStreaming.value = false
+    aiAbortController = null
   }
 }
 
@@ -1334,6 +1409,10 @@ watch(queryTaskId, (nextTaskId, previousTaskId) => {
 onMounted(loadTask)
 onBeforeUnmount(() => {
   stopPronunciation()
+  if (aiAbortController) {
+    aiAbortController.abort()
+    aiAbortController = null
+  }
   if (lookupSelectionRaf) {
     window.cancelAnimationFrame(lookupSelectionRaf)
     lookupSelectionRaf = null
@@ -1620,7 +1699,7 @@ onBeforeUnmount(() => {
         />
         <div class="button-row">
           <el-button :icon="Cpu" @click="router.push('/app/ai-config')">AI 配置</el-button>
-          <el-button type="primary" :icon="ChatLineRound" :loading="aiLoading" :disabled="aiLoading || aiRegenerating" @click="askAi(false)">提问</el-button>
+          <el-button type="primary" :icon="ChatLineRound" :loading="aiLoading || (aiStreaming && !aiRegenerating)" :disabled="aiLoading || aiRegenerating || aiStreaming" @click="askAi(false)">提问</el-button>
         </div>
       </div>
 
@@ -1628,14 +1707,14 @@ onBeforeUnmount(() => {
       <template v-else-if="aiResult?.content">
         <div class="ai-content-panel">
           <div class="card-header-row">
-            <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiResult.cacheHit ? '缓存命中' : '新生成' }}</el-tag>
-            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" :disabled="aiLoading || aiRegenerating" @click="askAi(true)">重新回答</el-button>
+            <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiStreaming ? '生成中' : (aiResult.cacheHit ? '缓存命中' : '新生成') }}</el-tag>
+            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" :disabled="aiLoading || aiRegenerating || aiStreaming" @click="askAi(true)">重新回答</el-button>
           </div>
 
-          <p class="ai-brief">{{ aiResult.content.answer }}</p>
+          <div class="ai-brief ai-answer-markdown" v-html="aiAnswerHtml"></div>
           <div v-if="aiResult.content.keyPoints?.length" class="ai-section">
             <h3>要点</h3>
-            <ul><li v-for="item in aiResult.content.keyPoints" :key="item">{{ item }}</li></ul>
+            <ul><li v-for="item in aiResult.content.keyPoints" :key="item" v-html="renderAiInlineMarkdown(item)"></li></ul>
           </div>
           <div v-if="aiResult.content.relatedWords?.length" class="ai-section">
             <h3>相关词</h3>

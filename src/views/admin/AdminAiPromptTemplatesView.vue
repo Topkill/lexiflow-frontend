@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { CopyDocument, Edit, Plus, Refresh, Select, View } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { CopyDocument, Delete, Edit, Plus, Refresh, Select, View } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import {
@@ -9,6 +9,7 @@ import {
   copyAdminAiPromptTemplate,
   copyBuiltinAdminAiPromptTemplate,
   createAdminAiPromptTemplate,
+  deleteAdminAiPromptTemplate,
   fetchAdminAiPromptGroups,
   updateAdminAiPromptTemplate,
 } from '../../api/admin'
@@ -164,6 +165,27 @@ async function restoreDefault(group) {
   }
 }
 
+async function removeTemplate(row) {
+  if (!row?.id) return
+  await ElMessageBox.confirm(`确认删除提示词模板「${row.name}」？删除后不可恢复。`, '删除提示词模板', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+  })
+  operatingKey.value = row.templateKey
+  try {
+    await deleteAdminAiPromptTemplate(row.id)
+    ElMessage.success('提示词模板已删除')
+    if (detailTemplate.value?.id === row.id) {
+      detailVisible.value = false
+      detailTemplate.value = null
+    }
+    await loadData()
+  } finally {
+    operatingKey.value = ''
+  }
+}
+
 onMounted(loadData)
 </script>
 
@@ -249,12 +271,23 @@ onMounted(loadData)
               </template>
             </el-table-column>
             <el-table-column prop="updatedAt" label="更新时间" width="180" />
-            <el-table-column label="操作" width="320">
+            <el-table-column label="操作" width="380">
               <template #default="{ row }">
                 <div class="admin-table-actions">
                   <el-button size="small" text type="primary" :icon="View" @click="openDetail(row)">查看</el-button>
                   <el-button size="small" text type="primary" :icon="Edit" :disabled="!row.editable" @click="openEdit(row)">编辑</el-button>
                   <el-button size="small" text type="primary" :icon="CopyDocument" :loading="operatingKey === row.templateKey" @click="copyTemplate(row)">复制副本</el-button>
+                  <el-button
+                    size="small"
+                    text
+                    type="danger"
+                    :icon="Delete"
+                    :loading="operatingKey === row.templateKey"
+                    :disabled="row.active"
+                    @click="removeTemplate(row)"
+                  >
+                    删除
+                  </el-button>
                   <el-button
                     v-if="row.active"
                     size="small"
@@ -325,6 +358,18 @@ onMounted(loadData)
           </div>
           <div class="admin-table-actions">
             <el-button size="small" plain :icon="CopyDocument" @click="copyTemplate(detailTemplate)">复制副本</el-button>
+            <el-button
+              v-if="!detailTemplate.builtIn"
+              size="small"
+              plain
+              type="danger"
+              :icon="Delete"
+              :loading="operatingKey === detailTemplate.templateKey"
+              :disabled="detailTemplate.active"
+              @click="removeTemplate(detailTemplate)"
+            >
+              删除
+            </el-button>
             <el-button
               v-if="detailTemplate.builtIn"
               size="small"
