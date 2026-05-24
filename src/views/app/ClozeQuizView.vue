@@ -377,12 +377,14 @@ async function generateQuiz() {
   }
   generating.value = true
   generateError.value = ''
+  const shouldRegenerate = Boolean(quiz.value?.quizId)
   try {
     resetQuizState()
     const task = await createClozeTask({
       dailyTaskId: todayTask.value.taskId,
       sourceType: form.sourceType,
       targetWordCount: form.targetWordCount,
+      regenerate: shouldRegenerate,
     }, { silentError: true })
     const quizId = task.resultId
     if (!quizId) {
