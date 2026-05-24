@@ -185,11 +185,6 @@ onMounted(loadData)
         <el-table-column prop="apiBaseUrl" label="API Base URL" min-width="260" show-overflow-tooltip />
         <el-table-column prop="dailyQuotaPerUser" label="每日配额" width="100" />
         <el-table-column prop="temperature" label="温度" width="90" />
-        <el-table-column prop="streamEnabled" label="输出" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.streamEnabled ? 'warning' : 'info'">{{ row.streamEnabled ? '流式' : '非流式' }}</el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="keyConfigured" label="Key" width="90">
           <template #default="{ row }">
             <el-tag :type="row.keyConfigured ? 'success' : 'danger'">{{ row.keyConfigured ? '已配置' : '缺失' }}</el-tag>
@@ -264,14 +259,6 @@ onMounted(loadData)
             <el-input-number v-model="form.dailyQuotaPerUser" :min="0" :max="10000" />
           </el-form-item>
         </div>
-        <el-form-item label="流式输出">
-          <el-switch
-            v-model="form.streamEnabled"
-            active-text="流式"
-            inactive-text="非流式"
-            inline-prompt
-          />
-        </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.enabled" />
         </el-form-item>
