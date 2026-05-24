@@ -45,6 +45,7 @@ const routes = [
       { path: 'words', name: 'adminWords', component: () => import('../views/admin/AdminWordsView.vue') },
       { path: 'imports', name: 'adminImports', component: () => import('../views/admin/AdminImportView.vue') },
       { path: 'ai-configs', name: 'adminAiConfigs', component: () => import('../views/admin/AdminAiConfigView.vue') },
+      { path: 'ai-prompts', name: 'adminAiPrompts', component: () => import('../views/admin/AdminAiPromptTemplatesView.vue') },
       { path: 'ai-logs', name: 'adminAiLogs', component: () => import('../views/admin/AdminAiLogsView.vue') },
       { path: 'system-configs', name: 'adminSystemConfigs', component: () => import('../views/admin/AdminSystemConfigView.vue') },
     ],

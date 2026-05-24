@@ -122,6 +122,30 @@ export function disableAdminAiPublicConfig(configId) {
   return http.post(`/api/v1/admin/ai/public-configs/${configId}/disable`)
 }
 
+export function fetchAdminAiPromptGroups() {
+  return http.get('/api/v1/admin/ai/prompt-templates')
+}
+
+export function createAdminAiPromptTemplate(payload) {
+  return http.post('/api/v1/admin/ai/prompt-templates', payload)
+}
+
+export function updateAdminAiPromptTemplate(templateId, payload) {
+  return http.put(`/api/v1/admin/ai/prompt-templates/${templateId}`, payload)
+}
+
+export function copyAdminAiPromptTemplate(templateId) {
+  return http.post(`/api/v1/admin/ai/prompt-templates/${templateId}/copy`)
+}
+
+export function copyBuiltinAdminAiPromptTemplate(featureType) {
+  return http.post(`/api/v1/admin/ai/prompt-templates/builtin/${featureType}/copy`)
+}
+
+export function bindAdminAiPromptFeature(featureType, payload) {
+  return http.put(`/api/v1/admin/ai/prompt-features/${featureType}/binding`, payload)
+}
+
 export function fetchSystemConfigs(params = {}) {
   return http.get('/api/v1/admin/system-configs', { params })
 }

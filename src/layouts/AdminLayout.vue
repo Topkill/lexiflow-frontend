@@ -27,6 +27,7 @@ const adminMenu = [
   { path: '/admin/words', label: '单词管理', icon: Tickets },
   { path: '/admin/imports', label: '单词导入', icon: Upload },
   { path: '/admin/ai-configs', label: 'AI 配置', icon: Cpu },
+  { path: '/admin/ai-prompts', label: 'AI 提示词', icon: Operation },
   { path: '/admin/ai-logs', label: 'AI 日志', icon: DataAnalysis },
   { path: '/admin/system-configs', label: '系统配置', icon: Setting },
 ]
