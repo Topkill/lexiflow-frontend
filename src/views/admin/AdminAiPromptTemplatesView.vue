@@ -11,6 +11,7 @@ import {
   createAdminAiPromptTemplate,
   deleteAdminAiPromptTemplate,
   fetchAdminAiPromptGroups,
+  fetchAdminWordbooks,
   updateAdminAiPromptTemplate,
 } from '../../api/admin'
 
@@ -18,7 +19,9 @@ const loading = ref(false)
 const saving = ref(false)
 const operatingKey = ref('')
 const groups = ref([])
+const wordbooks = ref([])
 const activeFeatureType = ref('')
+const scopeWordbookId = ref('0')
 const drawerVisible = ref(false)
 const detailVisible = ref(false)
 const detailTemplate = ref(null)
@@ -27,6 +30,7 @@ const formRef = ref()
 
 const form = reactive({
   featureType: '',
+  wordbookId: '0',
   name: '',
   systemPrompt: '',
   instructionPrompt: '',
@@ -42,6 +46,17 @@ const rules = {
 }
 
 const activeGroup = computed(() => groups.value.find((group) => group.featureType === activeFeatureType.value) || groups.value[0] || null)
+const scopeLabel = computed(() => {
+  if (String(scopeWordbookId.value) === '0') return '全部词书'
+  const wordbook = wordbooks.value.find((item) => String(item.id) === String(scopeWordbookId.value))
+  return wordbook ? wordbookScopeLabel(wordbook.id) : `词书 #${scopeWordbookId.value}`
+})
+
+function wordbookScopeLabel(wordbookId) {
+  if (String(wordbookId || '0') === '0') return '全部词书'
+  const wordbook = wordbooks.value.find((item) => String(item.id) === String(wordbookId))
+  return wordbook ? `${wordbook.name} / ${wordbook.type}` : `词书 #${wordbookId}`
+}
 
 function featureLabel(featureType) {
   return groups.value.find((group) => group.featureType === featureType)?.featureLabel || featureType
@@ -51,6 +66,7 @@ function resetForm() {
   editingTemplate.value = null
   Object.assign(form, {
     featureType: activeGroup.value?.featureType || groups.value[0]?.featureType || '',
+    wordbookId: scopeWordbookId.value || '0',
     name: '',
     systemPrompt: '',
     instructionPrompt: '',
@@ -62,7 +78,12 @@ function resetForm() {
 async function loadData() {
   loading.value = true
   try {
-    groups.value = await fetchAdminAiPromptGroups()
+    const [groupData, wordbookPage] = await Promise.all([
+      fetchAdminAiPromptGroups({ wordbookId: Number(scopeWordbookId.value || 0) }),
+      fetchAdminWordbooks({ page: 1, size: 100, enabled: true }),
+    ])
+    groups.value = groupData
+    wordbooks.value = wordbookPage.records || []
     if (!activeFeatureType.value && groups.value.length) {
       activeFeatureType.value = groups.value[0].featureType
     }
@@ -72,6 +93,37 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+async function handleScopeChange() {
+  if (drawerVisible.value && !editingTemplate.value) {
+    form.wordbookId = scopeWordbookId.value || '0'
+  }
+  await loadData()
+}
+
+function statusLabel(group) {
+  if (group.activeTemplateId) return '自定义中'
+  if (group.inheritedTemplate) return '继承中'
+  return '默认中'
+}
+
+function statusType(group) {
+  if (group.activeTemplateId) return 'success'
+  if (group.inheritedTemplate) return 'warning'
+  return 'info'
+}
+
+function displayedBaseTemplate(group) {
+  return group.inheritedTemplate || group.builtinTemplate
+}
+
+function templateOperationKey(row) {
+  return row?.templateKey || (row?.id ? `template:${row.id}` : '')
+}
+
+function restoreOperationKey(group) {
+  return `${group?.featureType || 'prompt'}:${scopeWordbookId.value || '0'}:restore`
 }
 
 function openCreate() {
@@ -89,6 +141,7 @@ function openEdit(row) {
   editingTemplate.value = row
   Object.assign(form, {
     featureType: row.featureType,
+    wordbookId: row.wordbookId || scopeWordbookId.value || '0',
     name: row.name || '',
     systemPrompt: row.systemPrompt || '',
     instructionPrompt: row.instructionPrompt || '',
@@ -108,6 +161,7 @@ async function submitForm() {
   try {
     const payload = {
       featureType: form.featureType,
+      wordbookId: Number(editingTemplate.value ? form.wordbookId || 0 : scopeWordbookId.value || 0),
       name: form.name.trim(),
       systemPrompt: form.systemPrompt.trim(),
       instructionPrompt: form.instructionPrompt.trim(),
@@ -128,12 +182,12 @@ async function submitForm() {
 }
 
 async function copyTemplate(row) {
-  operatingKey.value = row.templateKey
+  operatingKey.value = templateOperationKey(row)
   try {
     if (row.builtIn) {
-      await copyBuiltinAdminAiPromptTemplate(row.featureType)
+      await copyBuiltinAdminAiPromptTemplate(row.featureType, { wordbookId: Number(scopeWordbookId.value || 0) })
     } else {
-      await copyAdminAiPromptTemplate(row.id)
+      await copyAdminAiPromptTemplate(row.id, { wordbookId: Number(scopeWordbookId.value || 0) })
     }
     ElMessage.success('已复制为新模板副本')
     await loadData()
@@ -143,9 +197,12 @@ async function copyTemplate(row) {
 }
 
 async function activateTemplate(group, row) {
-  operatingKey.value = row.templateKey
+  operatingKey.value = templateOperationKey(row)
   try {
-    await bindAdminAiPromptFeature(group.featureType, { templateId: row.id ? Number(row.id) : null })
+    await bindAdminAiPromptFeature(group.featureType, {
+      wordbookId: Number(scopeWordbookId.value || 0),
+      templateId: row.id ? Number(row.id) : null,
+    })
     ElMessage.success(row.id ? '已设为当前使用模板' : '已恢复默认提示词')
     await loadData()
   } finally {
@@ -155,10 +212,13 @@ async function activateTemplate(group, row) {
 
 async function restoreDefault(group) {
   if (!group) return
-  operatingKey.value = group.builtinTemplate?.templateKey || `${group.featureType}:default`
+  operatingKey.value = restoreOperationKey(group)
   try {
-    await bindAdminAiPromptFeature(group.featureType, { templateId: null })
-    ElMessage.success('已恢复默认提示词')
+    await bindAdminAiPromptFeature(group.featureType, {
+      wordbookId: Number(scopeWordbookId.value || 0),
+      templateId: null,
+    })
+    ElMessage.success(String(scopeWordbookId.value) === '0' ? '已恢复默认提示词' : '已取消本词书专用提示词')
     await loadData()
   } finally {
     operatingKey.value = ''
@@ -172,7 +232,7 @@ async function removeTemplate(row) {
     confirmButtonText: '删除',
     cancelButtonText: '取消',
   })
-  operatingKey.value = row.templateKey
+  operatingKey.value = templateOperationKey(row)
   try {
     await deleteAdminAiPromptTemplate(row.id)
     ElMessage.success('提示词模板已删除')
@@ -191,10 +251,18 @@ onMounted(loadData)
 
 <template>
   <section>
-    <PageHeader title="AI 提示词管理" subtitle="按功能维护默认提示词和自定义模板">
+    <PageHeader title="AI 提示词管理" subtitle="按功能和词书范围维护提示词模板">
       <el-button :icon="Refresh" @click="loadData">刷新</el-button>
       <el-button type="primary" :icon="Plus" @click="openCreate">新增模板</el-button>
     </PageHeader>
+
+    <div class="scope-bar">
+      <span class="scope-label">生效词书</span>
+      <el-select v-model="scopeWordbookId" class="scope-select" filterable @change="handleScopeChange">
+        <el-option label="全部词书" value="0" />
+        <el-option v-for="wordbook in wordbooks" :key="wordbook.id" :label="wordbookScopeLabel(wordbook.id)" :value="String(wordbook.id)" />
+      </el-select>
+    </div>
 
     <el-skeleton v-if="loading" :rows="8" animated />
     <EmptyState v-else-if="groups.length === 0" title="暂无 AI 提示词模板" description="后端会提供 3 个功能的默认提示词作为只读兜底。">
@@ -204,42 +272,52 @@ onMounted(loadData)
       <el-tab-pane v-for="group in groups" :key="group.featureType" :name="group.featureType">
         <template #label>
           <span>{{ group.featureLabel }}</span>
-          <el-tag class="tab-tag" size="small" :type="group.usingDefault ? 'info' : 'success'">
-            {{ group.usingDefault ? '默认中' : '自定义中' }}
+          <el-tag class="tab-tag" size="small" :type="statusType(group)">
+            {{ statusLabel(group) }}
           </el-tag>
         </template>
 
         <el-card class="panel-card prompt-panel" shadow="never">
           <div class="prompt-section-header">
             <div>
-              <strong>默认提示词</strong>
-              <p>后端内置兜底，管理端只读，可复制为新模板副本。</p>
+              <strong>{{ group.inheritedTemplate ? '继承提示词' : '默认提示词' }}</strong>
+              <p v-if="group.inheritedTemplate">当前范围：{{ scopeLabel }}。没有专用模板时继承全部词书模板。</p>
+              <p v-else>当前范围：{{ scopeLabel }}。没有自定义模板时使用后端内置兜底。</p>
             </div>
             <div class="admin-table-actions">
-              <el-button size="small" plain :icon="CopyDocument" @click="copyTemplate(group.builtinTemplate)">复制副本</el-button>
+              <el-button size="small" plain :icon="CopyDocument" @click="copyTemplate(displayedBaseTemplate(group))">复制副本</el-button>
               <el-button
-                v-if="!group.usingDefault"
+                v-if="group.activeTemplateId"
                 size="small"
                 plain
                 type="warning"
                 :icon="Select"
-                :loading="operatingKey === group.builtinTemplate.templateKey"
+                :loading="operatingKey === restoreOperationKey(group)"
                 @click="restoreDefault(group)"
               >
-                恢复默认
+                {{ String(scopeWordbookId) === '0' ? '恢复默认' : '取消专用' }}
               </el-button>
-              <el-tag v-else type="success">当前使用</el-tag>
+              <el-tag v-else :type="group.inheritedTemplate ? 'warning' : 'success'">{{ group.inheritedTemplate ? '继承使用' : '当前使用' }}</el-tag>
             </div>
           </div>
+
+          <el-alert
+            v-if="group.inheritedTemplate"
+            class="mb-16"
+            type="warning"
+            :closable="false"
+            show-icon
+            :title="`当前继承全部词书模板：${group.inheritedTemplate.name}`"
+          />
 
           <div class="prompt-readonly-grid">
             <div class="prompt-readonly-block">
               <span class="prompt-readonly-label">系统提示词</span>
-              <el-input :model-value="group.builtinTemplate.systemPrompt" type="textarea" :rows="4" readonly />
+              <el-input :model-value="displayedBaseTemplate(group).systemPrompt" type="textarea" :rows="4" readonly />
             </div>
             <div class="prompt-readonly-block">
               <span class="prompt-readonly-label">规则提示词</span>
-              <el-input :model-value="group.builtinTemplate.instructionPrompt" type="textarea" :rows="10" readonly />
+              <el-input :model-value="displayedBaseTemplate(group).instructionPrompt" type="textarea" :rows="10" readonly />
             </div>
           </div>
         </el-card>
@@ -248,7 +326,7 @@ onMounted(loadData)
           <div class="prompt-section-header">
             <div>
               <strong>自定义模板</strong>
-              <p>可复制、编辑并切换当前生效模板。</p>
+              <p>仅对「{{ scopeLabel }}」生效，可直接写专用提示词。</p>
             </div>
             <el-button type="primary" :icon="Plus" @click="openCreateForFeature(group.featureType)">新增本功能模板</el-button>
           </div>
@@ -276,13 +354,13 @@ onMounted(loadData)
                 <div class="admin-table-actions">
                   <el-button size="small" text type="primary" :icon="View" @click="openDetail(row)">查看</el-button>
                   <el-button size="small" text type="primary" :icon="Edit" :disabled="!row.editable" @click="openEdit(row)">编辑</el-button>
-                  <el-button size="small" text type="primary" :icon="CopyDocument" :loading="operatingKey === row.templateKey" @click="copyTemplate(row)">复制副本</el-button>
+                  <el-button size="small" text type="primary" :icon="CopyDocument" :loading="operatingKey === templateOperationKey(row)" @click="copyTemplate(row)">复制副本</el-button>
                   <el-button
                     size="small"
                     text
                     type="danger"
                     :icon="Delete"
-                    :loading="operatingKey === row.templateKey"
+                    :loading="operatingKey === templateOperationKey(row)"
                     :disabled="row.active"
                     @click="removeTemplate(row)"
                   >
@@ -294,10 +372,10 @@ onMounted(loadData)
                     plain
                     type="warning"
                     :icon="Select"
-                    :loading="operatingKey === group.builtinTemplate.templateKey"
+                    :loading="operatingKey === restoreOperationKey(group)"
                     @click="restoreDefault(group)"
                   >
-                    恢复默认
+                    {{ String(scopeWordbookId) === '0' ? '恢复默认' : '取消专用' }}
                   </el-button>
                   <el-button
                     v-else
@@ -306,7 +384,7 @@ onMounted(loadData)
                     type="success"
                     :icon="Select"
                     :disabled="!row.enabled"
-                    :loading="operatingKey === row.templateKey"
+                    :loading="operatingKey === templateOperationKey(row)"
                     @click="activateTemplate(group, row)"
                   >
                     设为当前
@@ -315,7 +393,7 @@ onMounted(loadData)
               </template>
             </el-table-column>
           </el-table>
-          <EmptyState v-else title="暂无自定义模板" description="可以先复制默认提示词，或直接新增一套模板。" />
+          <EmptyState v-else title="暂无自定义模板" description="可以先复制当前展示提示词，或直接新增一套模板。" />
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -328,6 +406,9 @@ onMounted(loadData)
             <el-option label="AI 完形填空" value="CLOZE_QUIZ" />
             <el-option label="AI 评阅" value="CLOZE_REVIEW" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="生效词书">
+          <el-input class="full-input" :model-value="wordbookScopeLabel(form.wordbookId)" disabled />
         </el-form-item>
         <el-form-item label="模板名称" prop="name">
           <el-input v-model.trim="form.name" maxlength="128" placeholder="例如：更自然的完形填空提示词" />
@@ -364,7 +445,7 @@ onMounted(loadData)
               plain
               type="danger"
               :icon="Delete"
-              :loading="operatingKey === detailTemplate.templateKey"
+              :loading="operatingKey === templateOperationKey(detailTemplate)"
               :disabled="detailTemplate.active"
               @click="removeTemplate(detailTemplate)"
             >
@@ -376,14 +457,15 @@ onMounted(loadData)
               plain
               type="warning"
               :icon="Select"
-              :loading="operatingKey === detailTemplate.templateKey"
+              :loading="operatingKey === restoreOperationKey(activeGroup || groups[0])"
               @click="restoreDefault(activeGroup || groups[0])"
             >
-              恢复默认
+              {{ String(scopeWordbookId) === '0' ? '恢复默认' : '取消专用' }}
             </el-button>
           </div>
         </div>
         <el-descriptions :column="1" border>
+          <el-descriptions-item label="生效词书">{{ wordbookScopeLabel(detailTemplate.wordbookId) }}</el-descriptions-item>
           <el-descriptions-item label="当前使用">{{ detailTemplate.active ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="是否启用">{{ detailTemplate.enabled ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="来源">{{ detailTemplate.sourceBuiltinKey || detailTemplate.sourceTemplateId || '-' }}</el-descriptions-item>
@@ -440,11 +522,31 @@ onMounted(loadData)
   color: var(--el-text-color-primary);
 }
 
+.scope-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scope-label {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.scope-select {
+  width: 280px;
+}
+
 .tab-tag {
   margin-left: 8px;
 }
 
 .mt-16 {
   margin-top: 16px;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
 }
 </style>

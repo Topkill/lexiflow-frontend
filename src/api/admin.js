@@ -122,8 +122,8 @@ export function disableAdminAiPublicConfig(configId) {
   return http.post(`/api/v1/admin/ai/public-configs/${configId}/disable`)
 }
 
-export function fetchAdminAiPromptGroups() {
-  return http.get('/api/v1/admin/ai/prompt-templates')
+export function fetchAdminAiPromptGroups(params = {}) {
+  return http.get('/api/v1/admin/ai/prompt-templates', { params })
 }
 
 export function createAdminAiPromptTemplate(payload) {
@@ -134,12 +134,12 @@ export function updateAdminAiPromptTemplate(templateId, payload) {
   return http.put(`/api/v1/admin/ai/prompt-templates/${templateId}`, payload)
 }
 
-export function copyAdminAiPromptTemplate(templateId) {
-  return http.post(`/api/v1/admin/ai/prompt-templates/${templateId}/copy`)
+export function copyAdminAiPromptTemplate(templateId, params = {}) {
+  return http.post(`/api/v1/admin/ai/prompt-templates/${templateId}/copy`, null, { params })
 }
 
-export function copyBuiltinAdminAiPromptTemplate(featureType) {
-  return http.post(`/api/v1/admin/ai/prompt-templates/builtin/${featureType}/copy`)
+export function copyBuiltinAdminAiPromptTemplate(featureType, params = {}) {
+  return http.post(`/api/v1/admin/ai/prompt-templates/builtin/${featureType}/copy`, null, { params })
 }
 
 export function deleteAdminAiPromptTemplate(templateId) {
