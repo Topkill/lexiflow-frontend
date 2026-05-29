@@ -34,14 +34,81 @@ const form = reactive({
   name: '',
   systemPrompt: '',
   instructionPrompt: '',
+  outputSchemaJson: '',
+  userPromptText: '',
   enabled: true,
 })
+
+const defaultOutputSchemas = {
+  WORD_QA: {
+    answer: '',
+    keyPoints: [],
+    relatedWords: [],
+    followUps: [],
+  },
+  CLOZE_QUIZ: {
+    title: '',
+    passage: '',
+    passageZh: '',
+    explanations: [
+      {
+        word: '',
+        usedPos: '',
+        definitionZh: '',
+        reasonZh: '',
+      },
+    ],
+  },
+  CLOZE_REVIEW: {
+    overall: '',
+    mistakeTags: [],
+    strengths: [],
+    weaknesses: [
+      {
+        tag: '',
+        blankNos: [],
+        comment: '',
+      },
+    ],
+    suggestions: [],
+    blankReviews: [
+      {
+        blankNo: 0,
+        comment: '',
+        tip: '',
+      },
+    ],
+  },
+}
+
+const requiredOutputSchemaRules = {
+  WORD_QA: [
+    { key: 'answer', type: 'string' },
+    { key: 'keyPoints', type: 'array' },
+    { key: 'relatedWords', type: 'array' },
+    { key: 'followUps', type: 'array' },
+  ],
+  CLOZE_QUIZ: [
+    { key: 'title', type: 'string' },
+    { key: 'passage', type: 'string' },
+    { key: 'passageZh', type: 'string' },
+    { key: 'explanations', type: 'array', itemFields: ['word', 'usedPos', 'definitionZh', 'reasonZh'] },
+  ],
+  CLOZE_REVIEW: [
+    { key: 'overall', type: 'string' },
+    { key: 'mistakeTags', type: 'array' },
+    { key: 'strengths', type: 'array' },
+    { key: 'weaknesses', type: 'array', itemFields: ['tag', 'blankNos', 'comment'] },
+    { key: 'suggestions', type: 'array' },
+    { key: 'blankReviews', type: 'array', itemFields: ['blankNo', 'comment', 'tip'] },
+  ],
+}
 
 const rules = {
   featureType: [{ required: true, message: '请选择 AI 功能', trigger: 'change' }],
   name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
   systemPrompt: [{ required: true, message: '请输入系统提示词', trigger: 'blur' }],
-  instructionPrompt: [{ required: true, message: '请输入规则提示词', trigger: 'blur' }],
+  userPromptText: [{ required: true, message: '请输入用户提示词', trigger: 'blur' }],
   enabled: [{ required: true, message: '请选择启用状态', trigger: 'change' }],
 }
 
@@ -64,12 +131,15 @@ function featureLabel(featureType) {
 
 function resetForm() {
   editingTemplate.value = null
+  const featureType = activeGroup.value?.featureType || groups.value[0]?.featureType || ''
   Object.assign(form, {
-    featureType: activeGroup.value?.featureType || groups.value[0]?.featureType || '',
+    featureType,
     wordbookId: scopeWordbookId.value || '0',
     name: '',
     systemPrompt: '',
     instructionPrompt: '',
+    outputSchemaJson: getDefaultOutputSchemaJson(featureType),
+    userPromptText: buildUserPromptText('', getDefaultOutputSchemaJson(featureType), featureType),
     enabled: true,
   })
   formRef.value?.clearValidate()
@@ -145,6 +215,8 @@ function openEdit(row) {
     name: row.name || '',
     systemPrompt: row.systemPrompt || '',
     instructionPrompt: row.instructionPrompt || '',
+    outputSchemaJson: outputSchemaPreview(row.outputSchemaJson, row.featureType),
+    userPromptText: buildUserPromptText(row.instructionPrompt || '', outputSchemaPreview(row.outputSchemaJson, row.featureType), row.featureType),
     enabled: row.enabled ?? true,
   })
   drawerVisible.value = true
@@ -157,6 +229,16 @@ function openDetail(row) {
 
 async function submitForm() {
   await formRef.value?.validate()
+  let outputSchemaJson = ''
+  let instructionPrompt = ''
+  try {
+    const parsed = parseUserPromptText(form.userPromptText)
+    instructionPrompt = parsed.instructionPrompt
+    outputSchemaJson = buildOutputSchemaJson(parsed.outputSchemaJson)
+  } catch (error) {
+    ElMessage.warning(error.message || '用户提示词或输出 JSON 结构不正确')
+    return
+  }
   saving.value = true
   try {
     const payload = {
@@ -164,7 +246,8 @@ async function submitForm() {
       wordbookId: Number(editingTemplate.value ? form.wordbookId || 0 : scopeWordbookId.value || 0),
       name: form.name.trim(),
       systemPrompt: form.systemPrompt.trim(),
-      instructionPrompt: form.instructionPrompt.trim(),
+      instructionPrompt,
+      outputSchemaJson,
       enabled: form.enabled,
     }
     if (editingTemplate.value?.id) {
@@ -222,6 +305,142 @@ async function restoreDefault(group) {
     await loadData()
   } finally {
     operatingKey.value = ''
+  }
+}
+
+function outputSchemaPreview(outputSchemaJson, featureType) {
+  return JSON.stringify(parseOutputSchema(outputSchemaJson, featureType), null, 2)
+}
+
+function parseOutputSchema(outputSchemaJson, featureType) {
+  try {
+    const parsed = typeof outputSchemaJson === 'string' ? JSON.parse(outputSchemaJson) : outputSchemaJson
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed
+    }
+  } catch {
+    // 使用默认结构兜底。
+  }
+  return cloneJson(defaultOutputSchemas[featureType] || {})
+}
+
+function getDefaultOutputSchemaJson(featureType) {
+  const group = groups.value.find((item) => item.featureType === featureType)
+  const template = group ? displayedBaseTemplate(group) : null
+  return outputSchemaPreview(template?.outputSchemaJson, featureType)
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function handleFeatureChange(featureType) {
+  if (!editingTemplate.value) {
+    form.outputSchemaJson = getDefaultOutputSchemaJson(featureType)
+    form.userPromptText = buildUserPromptText('', form.outputSchemaJson, featureType)
+  }
+}
+
+function buildOutputSchemaJson(outputSchemaJson) {
+  const schema = parseJsonObject(outputSchemaJson)
+  validateOutputSchema(schema, form.featureType)
+  return JSON.stringify(schema, null, 2)
+}
+
+function buildUserPromptText(instructionPrompt, outputSchemaJson, featureType = form.featureType) {
+  const text = String(instructionPrompt || '').trim()
+  const schema = outputSchemaPreview(outputSchemaJson, featureType)
+  return text ? `${text}\n\n输出 JSON 结构：\n${schema}` : `输出 JSON 结构：\n${schema}`
+}
+
+function parseUserPromptText(text) {
+  const value = String(text || '').trim()
+  if (!value) {
+    throw new Error('用户提示词不能为空')
+  }
+  const jsonStart = findLastJsonObjectStart(value)
+  if (jsonStart < 0) {
+    throw new Error('用户提示词末尾必须包含输出 JSON 结构')
+  }
+  const instructionPrompt = value.slice(0, jsonStart)
+    .replace(/\s*输出\s*JSON\s*结构[:：]?\s*$/i, '')
+    .trim()
+  if (!instructionPrompt) {
+    throw new Error('用户提示词正文不能为空')
+  }
+  return {
+    instructionPrompt,
+    outputSchemaJson: value.slice(jsonStart).trim(),
+  }
+}
+
+function findLastJsonObjectStart(text) {
+  for (let index = text.lastIndexOf('{'); index >= 0; index = text.lastIndexOf('{', index - 1)) {
+    try {
+      const parsed = JSON.parse(text.slice(index))
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return index
+      }
+    } catch {
+      // 继续向前寻找完整 JSON 对象。
+    }
+  }
+  return -1
+}
+
+function parseJsonObject(text) {
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('输出 JSON 结构不是合法 JSON')
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('输出 JSON 结构必须是对象')
+  }
+  if (!Object.keys(parsed).length) {
+    throw new Error('输出 JSON 结构不能为空')
+  }
+  for (const key of Object.keys(parsed)) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)) {
+      throw new Error('输出 JSON 字段名只能使用字母、数字和下划线，且必须以字母开头')
+    }
+  }
+  return parsed
+}
+
+function validateOutputSchema(schema, featureType) {
+  const rules = requiredOutputSchemaRules[featureType] || []
+  for (const rule of rules) {
+    if (!Object.prototype.hasOwnProperty.call(schema, rule.key)) {
+      throw new Error(`输出结构缺少字段：${rule.key}`)
+    }
+    if (!matchesJsonType(schema[rule.key], rule.type)) {
+      throw new Error(`字段 ${rule.key} 的 JSON 类型不正确`)
+    }
+    if (rule.itemFields?.length) {
+      validateArrayItemFields(rule, schema[rule.key])
+    }
+  }
+}
+
+function matchesJsonType(value, type) {
+  if (type === 'array') return Array.isArray(value)
+  if (type === 'string') return typeof value === 'string'
+  if (type === 'number') return typeof value === 'number'
+  if (type === 'boolean') return typeof value === 'boolean'
+  if (type === 'object') return value && typeof value === 'object' && !Array.isArray(value)
+  return true
+}
+
+function validateArrayItemFields(rule, value) {
+  if (!Array.isArray(value) || !value.length || !value[0] || typeof value[0] !== 'object' || Array.isArray(value[0])) {
+    throw new Error(`字段 ${rule.key} 必须提供数组元素对象示例`)
+  }
+  for (const field of rule.itemFields) {
+    if (!Object.prototype.hasOwnProperty.call(value[0], field)) {
+      throw new Error(`字段 ${rule.key} 的数组元素缺少字段：${field}`)
+    }
   }
 }
 
@@ -316,8 +535,8 @@ onMounted(loadData)
               <el-input :model-value="displayedBaseTemplate(group).systemPrompt" type="textarea" :rows="4" readonly />
             </div>
             <div class="prompt-readonly-block">
-              <span class="prompt-readonly-label">规则提示词</span>
-              <el-input :model-value="displayedBaseTemplate(group).instructionPrompt" type="textarea" :rows="10" readonly />
+              <span class="prompt-readonly-label">用户提示词</span>
+              <el-input :model-value="buildUserPromptText(displayedBaseTemplate(group).instructionPrompt, displayedBaseTemplate(group).outputSchemaJson, group.featureType)" type="textarea" :rows="18" readonly />
             </div>
           </div>
         </el-card>
@@ -401,7 +620,7 @@ onMounted(loadData)
     <el-drawer v-model="drawerVisible" :title="editingTemplate ? '编辑提示词模板' : '新增提示词模板'" size="760px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="AI 功能" prop="featureType">
-          <el-select v-model="form.featureType" class="full-input" :disabled="Boolean(editingTemplate)">
+          <el-select v-model="form.featureType" class="full-input" :disabled="Boolean(editingTemplate)" @change="handleFeatureChange">
             <el-option label="AI 问答" value="WORD_QA" />
             <el-option label="AI 完形填空" value="CLOZE_QUIZ" />
             <el-option label="AI 评阅" value="CLOZE_REVIEW" />
@@ -416,8 +635,20 @@ onMounted(loadData)
         <el-form-item label="系统提示词" prop="systemPrompt">
           <el-input v-model="form.systemPrompt" type="textarea" :rows="5" maxlength="12000" show-word-limit />
         </el-form-item>
-        <el-form-item label="规则提示词" prop="instructionPrompt">
-          <el-input v-model="form.instructionPrompt" type="textarea" :rows="14" maxlength="20000" show-word-limit />
+        <el-form-item prop="userPromptText">
+          <template #label>
+            <span>用户提示词</span>
+            <span class="form-label-tip">末尾保留输出 JSON 结构，保存时会自动校验字段</span>
+          </template>
+          <el-input
+            v-model="form.userPromptText"
+            class="output-schema-json-editor"
+            type="textarea"
+            :rows="24"
+            maxlength="32000"
+            show-word-limit
+            spellcheck="false"
+          />
         </el-form-item>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="form.enabled" />
@@ -475,8 +706,8 @@ onMounted(loadData)
           <el-input :model-value="detailTemplate.systemPrompt" type="textarea" :rows="5" readonly />
         </div>
         <div class="prompt-readonly-block mt-16">
-          <span class="prompt-readonly-label">规则提示词</span>
-          <el-input :model-value="detailTemplate.instructionPrompt" type="textarea" :rows="14" readonly />
+          <span class="prompt-readonly-label">用户提示词</span>
+          <el-input :model-value="buildUserPromptText(detailTemplate.instructionPrompt, detailTemplate.outputSchemaJson, detailTemplate.featureType)" type="textarea" :rows="20" readonly />
         </div>
       </template>
     </el-drawer>
@@ -548,5 +779,10 @@ onMounted(loadData)
 
 .mb-16 {
   margin-bottom: 16px;
+}
+
+.output-schema-json-editor :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  line-height: 1.55;
 }
 </style>
