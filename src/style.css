@@ -2258,6 +2258,25 @@ body.study-ai-dialog-open .app-main .content-wrap {
   line-height: 1.8;
 }
 
+.ai-json-field {
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ai-extra-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
 .ai-example-item {
   display: flex;
   flex-direction: column;

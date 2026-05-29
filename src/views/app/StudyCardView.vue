@@ -8,7 +8,7 @@ import LexiIcon from '../../components/LexiIcon.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
-import { createClozeTask, streamWordQuestion } from '../../api/ai'
+import { askWordQuestion, createClozeTask, streamWordQuestion } from '../../api/ai'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
@@ -172,6 +172,7 @@ const aiAnswerHtml = computed(() => {
   const answer = normalizeAiMarkdownText(aiResult.value?.content?.answer)
   return answer ? aiMarkdown.render(answer) : ''
 })
+const aiExtraFields = computed(() => buildAiExtraFields(aiResult.value, ['answer', 'keyPoints', 'relatedWords', 'followUps']))
 const cardDefinitions = computed(() => {
   const transDefinitions = normalizeDefinitionEntries(card.value?.trans, card.value?.primaryPos)
   if (transDefinitions.length) return transDefinitions
@@ -438,6 +439,70 @@ function normalizeAiMarkdownText(value) {
 function renderAiInlineMarkdown(value) {
   const text = normalizeAiMarkdownText(value)
   return text ? aiMarkdown.renderInline(text) : ''
+}
+
+function buildAiExtraFields(result, excludedKeys = []) {
+  const content = result?.content || {}
+  const excluded = new Set(excludedKeys)
+  const fields = outputSchemaFields(result?.outputSchema)
+  return fields
+    .filter((field) => field?.key && !excluded.has(field.key))
+    .map((field) => ({
+      ...field,
+      value: content[field.key],
+      type: normalizeAiFieldType(field.type, content[field.key]),
+      html: normalizeAiFieldType(field.type, content[field.key]) === 'markdown' ? aiMarkdown.render(normalizeAiMarkdownText(content[field.key])) : '',
+    }))
+    .filter((field) => hasAiDisplayValue(field.value))
+}
+
+function outputSchemaFields(outputSchema) {
+  if (Array.isArray(outputSchema?.fields)) {
+    return outputSchema.fields
+  }
+  if (!outputSchema || typeof outputSchema !== 'object' || Array.isArray(outputSchema)) {
+    return []
+  }
+  return Object.entries(outputSchema).map(([key, sampleValue]) => ({
+    key,
+    label: key,
+    type: inferAiFieldType(sampleValue),
+  }))
+}
+
+function inferAiFieldType(value) {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return first && typeof first === 'object' && !Array.isArray(first) ? 'objectList' : 'stringList'
+  }
+  if (value && typeof value === 'object') return 'object'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'boolean') return 'boolean'
+  return 'markdown'
+}
+
+function normalizeAiFieldType(type, value) {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return first && typeof first === 'object' && !Array.isArray(first) ? 'objectList' : type
+  }
+  if (value && typeof value === 'object') return 'object'
+  return type || 'markdown'
+}
+
+function hasAiDisplayValue(value) {
+  if (value == null || value === false) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value).length > 0
+  return String(value).trim() !== ''
+}
+
+function formatAiFieldValue(value) {
+  if (value == null) return ''
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
 }
 
 function normalizeLookupSentences(value) {
@@ -1347,6 +1412,7 @@ async function askAi(regenerate = false) {
       relatedWords: [],
       followUps: [],
     },
+    outputSchema: null,
   }
   try {
     const finalPayload = await streamWordQuestion(
@@ -1359,6 +1425,9 @@ async function askAi(regenerate = false) {
       {
         signal: aiAbortController.signal,
         onStatus: (status) => {
+          if (status?.outputSchema && aiResult.value) {
+            aiResult.value.outputSchema = status.outputSchema
+          }
           if (status?.status === 'CACHE_HIT') {
             aiResult.value.cacheHit = true
           }
@@ -1367,6 +1436,9 @@ async function askAi(regenerate = false) {
           aiLoading.value = false
           if (!text) return
           aiResult.value.content.answer += text
+        },
+        onFieldItem: ({ field, item }) => {
+          appendAiFieldItem(field, item)
         },
         onDone: (payload) => {
           if (payload?.content) {
@@ -1380,9 +1452,15 @@ async function askAi(regenerate = false) {
     )
     if (finalPayload?.content) {
       aiResult.value = finalPayload
+    } else {
+      await hydrateAiResultFromCache(wordId, wordbookId, question)
     }
   } catch (error) {
     if (error?.name === 'AbortError') return
+    if (hasPartialAiAnswer()) {
+      const hydrated = await hydrateAiResultFromCache(wordId, wordbookId, question)
+      if (hydrated) return
+    }
     if (error.code === 40001 || error.message?.includes('AI 配置')) {
       ElMessage.warning('AI 配置不可用，请先检查公共配置或私有配置。')
     } else if (error.code === 40002 || error.status === 429 || error.message?.includes('配额')) {
@@ -1396,6 +1474,36 @@ async function askAi(regenerate = false) {
     aiStreaming.value = false
     aiAbortController = null
   }
+}
+
+function appendAiFieldItem(field, item) {
+  if (!field || item == null || !aiResult.value?.content) return
+  if (!Array.isArray(aiResult.value.content[field])) {
+    aiResult.value.content[field] = []
+  }
+  aiResult.value.content[field].push(item)
+}
+
+function hasPartialAiAnswer() {
+  return Boolean(aiResult.value?.content?.answer?.trim())
+}
+
+async function hydrateAiResultFromCache(wordId, wordbookId, question) {
+  if (!hasPartialAiAnswer()) return false
+  try {
+    const payload = await askWordQuestion(wordId, {
+      wordbookId,
+      question,
+      regenerate: false,
+    })
+    if (payload?.content) {
+      aiResult.value = payload
+      return true
+    }
+  } catch {
+    // 流式回答已经展示，补全失败时保留现有内容即可。
+  }
+  return false
 }
 
 function useFollowUp(question) {
@@ -1721,7 +1829,7 @@ onBeforeUnmount(() => {
             <ul><li v-for="item in aiResult.content.keyPoints" :key="item" v-html="renderAiInlineMarkdown(item)"></li></ul>
           </div>
           <div v-if="aiResult.content.relatedWords?.length" class="ai-section">
-            <h3>相关词</h3>
+            <h3>相关表达</h3>
             <div class="ai-tag-row">
               <el-tag v-for="item in aiResult.content.relatedWords" :key="item" effect="plain">{{ item }}</el-tag>
             </div>
@@ -1733,6 +1841,18 @@ onBeforeUnmount(() => {
                 {{ item }}
               </el-button>
             </div>
+          </div>
+          <div v-for="field in aiExtraFields" :key="field.key" class="ai-section">
+            <h3>{{ field.label || field.key }}</h3>
+            <div v-if="field.type === 'markdown'" class="ai-answer-markdown" v-html="field.html"></div>
+            <div v-else-if="field.type === 'tagList'" class="ai-tag-row">
+              <el-tag v-for="item in field.value" :key="item" effect="plain">{{ item }}</el-tag>
+            </div>
+            <ul v-else-if="field.type === 'stringList'">
+              <li v-for="item in field.value" :key="item" v-html="renderAiInlineMarkdown(item)"></li>
+            </ul>
+            <pre v-else-if="field.type === 'object' || field.type === 'objectList' || field.type === 'json'" class="ai-json-field">{{ formatAiFieldValue(field.value) }}</pre>
+            <p v-else>{{ formatAiFieldValue(field.value) }}</p>
           </div>
         </div>
       </template>

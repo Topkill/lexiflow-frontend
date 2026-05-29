@@ -48,7 +48,7 @@ function clearSession() {
   }
 }
 
-async function refreshSession() {
+export async function refreshAuthSession() {
   if (!refreshPromise) {
     refreshPromise = http.post('/api/v1/auth/refresh', null, { skipAuthRefresh: true, silentError: true })
       .then((session) => {
@@ -84,7 +84,7 @@ http.interceptors.response.use(
     if (error.response?.status === 401 && originalConfig && !originalConfig._retry && !originalConfig.skipAuthRefresh) {
       originalConfig._retry = true
       try {
-        const session = await refreshSession()
+        const session = await refreshAuthSession()
         originalConfig.headers = originalConfig.headers || {}
         originalConfig.headers.Authorization = `Bearer ${session.accessToken}`
         if (session.csrfToken && ['post', 'put', 'patch', 'delete'].includes(originalConfig.method)) {

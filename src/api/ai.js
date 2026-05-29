@@ -1,4 +1,4 @@
-import { http } from './http'
+import { http, refreshAuthSession } from './http'
 
 const TOKEN_KEY = 'lexiflow_access_token'
 const CSRF_KEY = 'lexiflow_csrf_token'
@@ -9,22 +9,11 @@ export function askWordQuestion(wordId, payload, config = {}) {
 
 export async function streamWordQuestion(wordId, payload, handlers = {}) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
-  const token = localStorage.getItem(TOKEN_KEY)
-  const csrfToken = localStorage.getItem(CSRF_KEY)
-  const headers = {
-    Accept: 'text/event-stream',
-    'Content-Type': 'application/json',
+  let response = await fetchWordQuestionStream(baseUrl, wordId, payload, handlers.signal)
+  if (response.status === 401) {
+    const session = await refreshAuthSession()
+    response = await fetchWordQuestionStream(baseUrl, wordId, payload, handlers.signal, session)
   }
-  if (token) headers.Authorization = `Bearer ${token}`
-  if (csrfToken) headers['X-CSRF-Token'] = csrfToken
-
-  const response = await fetch(`${baseUrl}/api/v1/ai/words/${wordId}/questions/stream`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify(payload),
-    signal: handlers.signal,
-  })
 
   if (!response.ok || !response.body) {
     throw await parseStreamHttpError(response)
@@ -46,9 +35,15 @@ export async function streamWordQuestion(wordId, payload, handlers = {}) {
       buffer = buffer.slice(separatorIndex + 2)
       const parsed = parseSseEvent(rawEvent)
       if (parsed) {
-        const payloadData = parsed.data ? JSON.parse(parsed.data) : null
+        const tolerateInvalid = parsed.event === 'chunk' || parsed.event === 'field_item'
+        const payloadData = parseSseJson(parsed.data, tolerateInvalid)
+        if (payloadData == null && tolerateInvalid) {
+          separatorIndex = buffer.indexOf('\n\n')
+          continue
+        }
         if (parsed.event === 'status') handlers.onStatus?.(payloadData)
         if (parsed.event === 'chunk') handlers.onChunk?.(payloadData?.text || '')
+        if (parsed.event === 'field_item') handlers.onFieldItem?.(payloadData)
         if (parsed.event === 'done') {
           donePayload = payloadData
           handlers.onDone?.(payloadData)
@@ -64,15 +59,37 @@ export async function streamWordQuestion(wordId, payload, handlers = {}) {
     }
   }
 
+  buffer += decoder.decode()
   const tail = buffer.replace(/\r\n/g, '\n').trim()
   if (tail) {
     const parsed = parseSseEvent(tail)
     if (parsed?.event === 'done') {
-      donePayload = parsed.data ? JSON.parse(parsed.data) : null
+      donePayload = parseSseJson(parsed.data)
       handlers.onDone?.(donePayload)
     }
   }
   return donePayload
+}
+
+function fetchWordQuestionStream(baseUrl, wordId, payload, signal, session = null) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const csrfToken = localStorage.getItem(CSRF_KEY)
+  const headers = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+  }
+  const nextToken = session?.accessToken || token
+  const nextCsrfToken = session?.csrfToken || csrfToken
+  if (nextToken) headers.Authorization = `Bearer ${nextToken}`
+  if (nextCsrfToken) headers['X-CSRF-Token'] = nextCsrfToken
+
+  return fetch(`${baseUrl}/api/v1/ai/words/${wordId}/questions/stream`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify(payload),
+    signal,
+  })
 }
 
 async function parseStreamHttpError(response) {
@@ -119,7 +136,21 @@ function parseSseEvent(rawEvent) {
     }
   }
   if (!event && dataLines.length === 0) return null
-  return { event, data: dataLines.join('\n') }
+  return { event, data: dataLines.join('') }
+}
+
+function parseSseJson(data, tolerateInvalid = false) {
+  if (!data) return null
+  try {
+    return JSON.parse(data)
+  } catch {
+    try {
+      return JSON.parse(data.replace(/\n/g, ''))
+    } catch (error) {
+      if (tolerateInvalid) return null
+      throw error
+    }
+  }
 }
 
 export function createClozeTask(payload, config = {}) {
