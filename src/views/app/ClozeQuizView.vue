@@ -47,6 +47,7 @@ const aiReviewState = ref('idle')
 const aiReviewMessage = ref('')
 const aiReviewText = ref('')
 const aiReviewContent = ref(null)
+const aiReviewOutputSchema = ref(null)
 const aiReviewError = ref('')
 const aiReviewAttemptId = ref('')
 const aiReviewCacheHit = ref(false)
@@ -154,6 +155,19 @@ const passageZh = computed(() => normalizeLookupText(quiz.value?.passageZh))
 const aiReviewHtml = computed(() => {
   if (!aiReviewText.value) return ''
   return aiReviewMarkdown.render(normalizeAiReviewMarkdown(aiReviewText.value))
+})
+const aiReviewExtraFields = computed(() => buildAiExtraFields({ content: aiReviewContent.value, outputSchema: aiReviewOutputSchema.value }, [
+  'overall',
+  'mistakeTags',
+  'strengths',
+  'weaknesses',
+  'suggestions',
+  'blankReviews',
+]))
+const clozeAiExtraFields = computed(() => buildAiExtraFields(clozeAiResult.value, ['answer', 'keyPoints', 'relatedWords', 'followUps']))
+const clozeAiAnswerHtml = computed(() => {
+  const answer = String(clozeAiResult.value?.content?.answer || '').trim()
+  return answer ? aiReviewMarkdown.render(normalizeAiReviewMixedTextSpacing(answer)) : ''
 })
 const aiReviewTagType = computed(() => {
   if (aiReviewState.value === 'done') return aiReviewCacheHit.value ? 'success' : 'primary'
@@ -465,6 +479,7 @@ function resetAiReviewState() {
   aiReviewMessage.value = ''
   aiReviewText.value = ''
   aiReviewContent.value = null
+  aiReviewOutputSchema.value = null
   aiReviewError.value = ''
   aiReviewAttemptId.value = ''
   aiReviewCacheHit.value = false
@@ -500,6 +515,7 @@ function applyAiReviewResponse(review) {
   if (!review) return false
   aiReviewAttemptId.value = String(review.attemptId || aiReviewAttemptId.value || '')
   aiReviewContent.value = review.content || null
+  aiReviewOutputSchema.value = review.outputSchema || null
   aiReviewCacheHit.value = Boolean(review.cacheHit)
   if (review.status === 'DONE') {
     aiReviewState.value = 'done'
@@ -536,6 +552,75 @@ function normalizeAiReviewMixedTextSpacing(text) {
     .replace(/[ \t]{2,}/g, ' ')
 }
 
+function buildAiExtraFields(result, excludedKeys = []) {
+  const content = result?.content || {}
+  const excluded = new Set(excludedKeys)
+  const fields = outputSchemaFields(result?.outputSchema)
+  return fields
+    .filter((field) => field?.key && !excluded.has(field.key))
+    .map((field) => ({
+      ...field,
+      value: content[field.key],
+      type: normalizeAiFieldType(field.type, content[field.key]),
+      html: normalizeAiFieldType(field.type, content[field.key]) === 'markdown' ? aiReviewMarkdown.render(normalizeAiReviewMarkdown(content[field.key])) : '',
+    }))
+    .filter((field) => hasAiDisplayValue(field.value))
+}
+
+function outputSchemaFields(outputSchema) {
+  if (Array.isArray(outputSchema?.fields)) {
+    return outputSchema.fields
+  }
+  if (!outputSchema || typeof outputSchema !== 'object' || Array.isArray(outputSchema)) {
+    return []
+  }
+  return Object.entries(outputSchema).map(([key, sampleValue]) => ({
+    key,
+    label: key,
+    type: inferAiFieldType(sampleValue),
+  }))
+}
+
+function inferAiFieldType(value) {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return first && typeof first === 'object' && !Array.isArray(first) ? 'objectList' : 'stringList'
+  }
+  if (value && typeof value === 'object') return 'object'
+  if (typeof value === 'number') return 'number'
+  if (typeof value === 'boolean') return 'boolean'
+  return 'markdown'
+}
+
+function normalizeAiFieldType(type, value) {
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return first && typeof first === 'object' && !Array.isArray(first) ? 'objectList' : type
+  }
+  if (value && typeof value === 'object') return 'object'
+  return type || 'markdown'
+}
+
+function hasAiDisplayValue(value) {
+  if (value == null || value === false) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value).length > 0
+  return String(value).trim() !== ''
+}
+
+function renderAiInlineMarkdown(value) {
+  const text = normalizeAiReviewMixedTextSpacing(String(value || '').trim())
+  return text ? aiReviewMarkdown.renderInline(text) : ''
+}
+
+function formatAiFieldValue(value) {
+  if (value == null) return ''
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
+}
+
 async function startAiReviewStream(attemptId, regenerate = false) {
   const id = String(attemptId || '')
   if (!id) return
@@ -545,6 +630,7 @@ async function startAiReviewStream(attemptId, regenerate = false) {
   aiReviewMessage.value = '正在生成 AI 评阅'
   aiReviewText.value = ''
   aiReviewContent.value = null
+  aiReviewOutputSchema.value = null
   aiReviewError.value = ''
   aiReviewCacheHit.value = false
   const controller = new AbortController()
@@ -651,16 +737,24 @@ function handleAiReviewSseBlock(block) {
       dataLines.push(line.slice(5).trimStart())
     }
   })
-  const rawData = dataLines.join('\n')
+  const rawData = dataLines.join('')
   let data = rawData
   if (rawData) {
     try {
-      data = JSON.parse(rawData)
+      data = parseAiReviewSseJson(rawData)
     } catch {
       data = rawData
     }
   }
   handleAiReviewSseEvent(event, data)
+}
+
+function parseAiReviewSseJson(data) {
+  try {
+    return JSON.parse(data)
+  } catch {
+    return JSON.parse(data.replace(/\n/g, ''))
+  }
 }
 
 function handleAiReviewSseEvent(event, data) {
@@ -1434,6 +1528,20 @@ onBeforeUnmount(() => {
                       v-html="aiReviewHtml"
                     />
                     <span v-else>{{ aiReviewText || 'AI 评阅尚未生成。' }}</span>
+                    <div v-if="aiReviewExtraFields.length" class="ai-extra-field-list">
+                      <div v-for="field in aiReviewExtraFields" :key="field.key" class="ai-section">
+                        <h3>{{ field.label || field.key }}</h3>
+                        <div v-if="field.type === 'markdown'" class="cloze-ai-review-markdown" v-html="field.html"></div>
+                        <div v-else-if="field.type === 'tagList'" class="ai-tag-row">
+                          <el-tag v-for="item in field.value" :key="item" effect="plain">{{ item }}</el-tag>
+                        </div>
+                        <ul v-else-if="field.type === 'stringList'">
+                          <li v-for="item in field.value" :key="item" v-html="renderAiInlineMarkdown(item)"></li>
+                        </ul>
+                        <pre v-else-if="field.type === 'object' || field.type === 'objectList' || field.type === 'json'" class="ai-json-field">{{ formatAiFieldValue(field.value) }}</pre>
+                        <p v-else>{{ formatAiFieldValue(field.value) }}</p>
+                      </div>
+                    </div>
                   </template>
                 </div>
               </div>
@@ -1543,7 +1651,7 @@ onBeforeUnmount(() => {
             <el-button size="small" :icon="Refresh" :loading="clozeAiRegenerating" :disabled="clozeAiLoading || clozeAiRegenerating" @click="askClozeAi(true)">重新回答</el-button>
           </div>
 
-          <p class="ai-brief">{{ clozeAiResult.content.answer }}</p>
+          <div class="ai-brief cloze-ai-review-markdown" v-html="clozeAiAnswerHtml"></div>
           <div v-if="clozeAiResult.content.keyPoints?.length" class="ai-section">
             <h3>要点</h3>
             <ul><li v-for="item in clozeAiResult.content.keyPoints" :key="item">{{ item }}</li></ul>
@@ -1561,6 +1669,18 @@ onBeforeUnmount(() => {
                 {{ item }}
               </el-button>
             </div>
+          </div>
+          <div v-for="field in clozeAiExtraFields" :key="field.key" class="ai-section">
+            <h3>{{ field.label || field.key }}</h3>
+            <div v-if="field.type === 'markdown'" class="cloze-ai-review-markdown" v-html="field.html"></div>
+            <div v-else-if="field.type === 'tagList'" class="ai-tag-row">
+              <el-tag v-for="item in field.value" :key="item" effect="plain">{{ item }}</el-tag>
+            </div>
+            <ul v-else-if="field.type === 'stringList'">
+              <li v-for="item in field.value" :key="item" v-html="renderAiInlineMarkdown(item)"></li>
+            </ul>
+            <pre v-else-if="field.type === 'object' || field.type === 'objectList' || field.type === 'json'" class="ai-json-field">{{ formatAiFieldValue(field.value) }}</pre>
+            <p v-else>{{ formatAiFieldValue(field.value) }}</p>
           </div>
         </div>
       </template>
