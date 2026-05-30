@@ -4,6 +4,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   build: {
+    chunkSizeWarningLimit: 1000,
     rolldownOptions: {
       output: {
         codeSplitting: {
@@ -22,7 +23,6 @@ export default defineConfig({
               name: 'vendor-element-plus',
               test: /node_modules[\\/]element-plus[\\/]/,
               priority: 20,
-              maxSize: 450 * 1024,
             },
             {
               name: 'vendor-common',
