@@ -71,8 +71,6 @@ export const useAuthStore = defineStore('auth', {
       try {
         if (this.accessToken) {
           await this.fetchMe({ silentError: true })
-        } else {
-          await this.refresh({ skipAuthRefresh: true, silentError: true })
         }
       } catch {
         this.clearSession()
