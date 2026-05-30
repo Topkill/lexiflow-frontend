@@ -53,6 +53,7 @@ const defaultOutputSchemas = {
     explanations: [
       {
         word: '',
+        usedForm: '',
         usedPos: '',
         definitionZh: '',
         reasonZh: '',
@@ -92,7 +93,7 @@ const requiredOutputSchemaRules = {
     { key: 'title', type: 'string' },
     { key: 'passage', type: 'string' },
     { key: 'passageZh', type: 'string' },
-    { key: 'explanations', type: 'array', itemFields: ['word', 'usedPos', 'definitionZh', 'reasonZh'] },
+    { key: 'explanations', type: 'array', itemFields: ['word', 'usedForm', 'usedPos', 'definitionZh', 'reasonZh'] },
   ],
   CLOZE_REVIEW: [
     { key: 'overall', type: 'string' },
