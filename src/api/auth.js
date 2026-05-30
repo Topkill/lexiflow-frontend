@@ -12,8 +12,8 @@ export function refreshToken(config = {}) {
   return http.post('/api/v1/auth/refresh', null, config)
 }
 
-export function logout() {
-  return http.post('/api/v1/auth/logout')
+export function logout(config = {}) {
+  return http.post('/api/v1/auth/logout', null, config)
 }
 
 export function fetchCurrentUser(config = {}) {

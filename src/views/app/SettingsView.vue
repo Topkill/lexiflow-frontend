@@ -1,5 +1,6 @@
 <script setup>
 import { nextTick, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -7,6 +8,7 @@ import { useAuthStore } from '../../stores/auth'
 import { changePassword, fetchProfile, fetchUserSettings, updateProfile, updateUserSettings } from '../../api/user'
 
 const auth = useAuthStore()
+const router = useRouter()
 const loading = ref(false)
 const savingProfile = ref(false)
 const savingPassword = ref(false)
@@ -107,7 +109,14 @@ async function submitPassword() {
     Object.assign(passwordForm, { oldPassword: '', newPassword: '', confirmPassword: '' })
     await nextTick()
     passwordFormRef.value?.clearValidate()
-    ElMessage.success('密码已更新')
+    ElMessage.success('密码已更新，请重新登录')
+    try {
+      await auth.logout({ silentError: true })
+    } catch {
+      // 即使后端登出请求失败，本地会话也已经清理，仍然回到登录页。
+    } finally {
+      router.replace('/login')
+    }
   } finally {
     savingPassword.value = false
   }
