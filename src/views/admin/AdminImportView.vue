@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Refresh, Upload } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
@@ -20,9 +20,9 @@ const downloading = ref(false)
 const excelWordbookId = ref('')
 const jsonWordbookId = ref('')
 const duplicateStrategy = ref('SKIP')
-const jsonDuplicateStrategy = ref('OVERWRITE')
+const jsonDuplicateStrategy = ref('SKIP')
 const jsonSourceUrl = ref('https://files.typewords.cc/dicts/en/word/CET4_T.json')
-const replaceWordbook = ref(true)
+const replaceWordbook = ref(false)
 const wordbooks = ref([])
 const selectedFile = ref(null)
 const uploadRef = ref()
@@ -53,7 +53,7 @@ async function loadWordbooks() {
       excelWordbookId.value = defaultWordbookId
     }
     if (!wordbooks.value.some((book) => book.id === jsonWordbookId.value)) {
-      jsonWordbookId.value = defaultWordbookId
+      jsonWordbookId.value = ''
     }
   } finally {
     loadingWordbooks.value = false
@@ -116,6 +116,23 @@ async function submitJsonImport() {
   if (!jsonSourceUrl.value.trim()) {
     ElMessage.warning('请填写 JSON URL')
     return
+  }
+  if (replaceWordbook.value) {
+    const targetWordbook = wordbooks.value.find((book) => book.id === jsonWordbookId.value)
+    const targetName = targetWordbook ? `${targetWordbook.name} (${targetWordbook.wordCount || 0})` : `词库 #${jsonWordbookId.value}`
+    try {
+      await ElMessageBox.confirm(
+        `确定先清空「${targetName}」现有单词再导入 JSON 吗？`,
+        '确认替换词库单词',
+        {
+          type: 'warning',
+          confirmButtonText: '清空并导入',
+          cancelButtonText: '取消',
+        },
+      )
+    } catch {
+      return
+    }
   }
   importingJson.value = true
   try {
@@ -217,8 +234,14 @@ onMounted(loadWordbooks)
               ]"
             />
           </el-form-item>
-          <el-form-item label="替换词库单词">
-            <el-switch v-model="replaceWordbook" active-text="先清空关联" inactive-text="追加导入" />
+          <el-form-item label="导入模式">
+            <el-segmented
+              v-model="replaceWordbook"
+              :options="[
+                { label: '追加导入', value: false },
+                { label: '清空后导入', value: true },
+              ]"
+            />
           </el-form-item>
           <el-button type="primary" :loading="importingJson" @click="submitJsonImport">导入 JSON</el-button>
         </el-form>
