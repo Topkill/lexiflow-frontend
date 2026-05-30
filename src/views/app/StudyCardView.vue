@@ -1540,12 +1540,16 @@ onBeforeUnmount(() => {
     <PageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
     <el-skeleton v-if="loading" :rows="6" animated />
-    <el-card v-else-if="!card && generatingCloze" class="panel-card narrow" shadow="never">
-      <StarterPanel
-        title="本组学习已完成"
-        description="正在生成必做完形填空，稍等片刻就会进入练习。"
-        :icon="Refresh"
-      />
+    <el-card v-else-if="!card && generatingCloze" class="panel-card narrow cloze-generating-card" shadow="never">
+      <div class="cloze-generating-visual" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <div>
+        <strong>本组学习已完成</strong>
+        <p>正在生成必做完形填空，稍等片刻就会进入练习。</p>
+      </div>
     </el-card>
 
     <el-card v-else-if="!card && !cardLoading" class="panel-card narrow" shadow="never">
