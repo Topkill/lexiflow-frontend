@@ -8,14 +8,14 @@ export function register(payload) {
   return http.post('/api/v1/auth/register', payload)
 }
 
-export function refreshToken() {
-  return http.post('/api/v1/auth/refresh')
+export function refreshToken(config = {}) {
+  return http.post('/api/v1/auth/refresh', null, config)
 }
 
 export function logout() {
   return http.post('/api/v1/auth/logout')
 }
 
-export function fetchCurrentUser() {
-  return http.get('/api/v1/auth/me')
+export function fetchCurrentUser(config = {}) {
+  return http.get('/api/v1/auth/me', config)
 }

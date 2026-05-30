@@ -54,13 +54,13 @@ export const useAuthStore = defineStore('auth', {
     async register(payload) {
       return authApi.register(payload)
     },
-    async refresh() {
-      const session = await authApi.refreshToken()
+    async refresh(config = {}) {
+      const session = await authApi.refreshToken(config)
       this.setSession(session)
       return session
     },
-    async fetchMe() {
-      const user = await authApi.fetchCurrentUser()
+    async fetchMe(config = {}) {
+      const user = await authApi.fetchCurrentUser(config)
       this.setUser(user)
       return user
     },
@@ -70,9 +70,9 @@ export const useAuthStore = defineStore('auth', {
       }
       try {
         if (this.accessToken) {
-          await this.fetchMe()
+          await this.fetchMe({ silentError: true })
         } else {
-          await this.refresh()
+          await this.refresh({ skipAuthRefresh: true, silentError: true })
         }
       } catch {
         this.clearSession()
