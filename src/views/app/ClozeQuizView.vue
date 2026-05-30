@@ -70,6 +70,9 @@ const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
 const CLOZE_FORM_STORAGE_VERSION = 1
 const AI_QUOTA_EXHAUSTED_CODE = 40002
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
+const AI_FIELD_LABELS = {
+  grammarTip: '语法小知识',
+}
 const queryTaskId = computed(() => route.query.taskId || '')
 const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
@@ -164,6 +167,7 @@ const aiReviewExtraFields = computed(() => buildAiExtraFields({ content: aiRevie
   'weaknesses',
   'suggestions',
   'blankReviews',
+  'grammarTip',
 ]))
 const clozeAiExtraFields = computed(() => buildAiExtraFields(clozeAiResult.value, ['answer', 'keyPoints', 'relatedWords', 'followUps']))
 const clozeAiAnswerHtml = computed(() => {
@@ -574,14 +578,17 @@ function buildAiExtraFields(result, excludedKeys = []) {
 
 function outputSchemaFields(outputSchema) {
   if (Array.isArray(outputSchema?.fields)) {
-    return outputSchema.fields
+    return outputSchema.fields.map((field) => ({
+      ...field,
+      label: field.label || AI_FIELD_LABELS[field.key] || field.key,
+    }))
   }
   if (!outputSchema || typeof outputSchema !== 'object' || Array.isArray(outputSchema)) {
     return []
   }
   return Object.entries(outputSchema).map(([key, sampleValue]) => ({
     key,
-    label: key,
+    label: AI_FIELD_LABELS[key] || key,
     type: inferAiFieldType(sampleValue),
   }))
 }

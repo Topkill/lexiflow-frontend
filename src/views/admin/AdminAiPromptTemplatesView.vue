@@ -45,6 +45,7 @@ const defaultOutputSchemas = {
     keyPoints: [],
     relatedWords: [],
     followUps: [],
+    grammarTip: '',
   },
   CLOZE_QUIZ: {
     title: '',
@@ -79,6 +80,7 @@ const defaultOutputSchemas = {
         tip: '',
       },
     ],
+    grammarTip: '',
   },
 }
 
@@ -88,6 +90,7 @@ const requiredOutputSchemaRules = {
     { key: 'keyPoints', type: 'array' },
     { key: 'relatedWords', type: 'array' },
     { key: 'followUps', type: 'array' },
+    { key: 'grammarTip', type: 'string' },
   ],
   CLOZE_QUIZ: [
     { key: 'title', type: 'string' },
@@ -102,6 +105,7 @@ const requiredOutputSchemaRules = {
     { key: 'weaknesses', type: 'array', itemFields: ['tag', 'blankNos', 'comment'] },
     { key: 'suggestions', type: 'array' },
     { key: 'blankReviews', type: 'array', itemFields: ['blankNo', 'comment', 'tip'] },
+    { key: 'grammarTip', type: 'string' },
   ],
 }
 
@@ -317,12 +321,21 @@ function parseOutputSchema(outputSchemaJson, featureType) {
   try {
     const parsed = typeof outputSchemaJson === 'string' ? JSON.parse(outputSchemaJson) : outputSchemaJson
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed
+      return enrichOutputSchema(parsed, featureType)
     }
   } catch {
     // 使用默认结构兜底。
   }
   return cloneJson(defaultOutputSchemas[featureType] || {})
+}
+
+function enrichOutputSchema(schema, featureType) {
+  const normalized = cloneJson(schema)
+  if ((featureType === 'WORD_QA' || featureType === 'CLOZE_REVIEW')
+      && !Object.prototype.hasOwnProperty.call(normalized, 'grammarTip')) {
+    normalized.grammarTip = ''
+  }
+  return normalized
 }
 
 function getDefaultOutputSchemaJson(featureType) {

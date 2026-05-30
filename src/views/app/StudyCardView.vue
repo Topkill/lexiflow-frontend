@@ -34,6 +34,9 @@ const ITEM_TYPE_EXTRA = 'EXTRA'
 const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 const SEGMENT_SPLIT_THRESHOLD = 10
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
+const AI_FIELD_LABELS = {
+  grammarTip: '语法小知识',
+}
 
 const router = useRouter()
 const route = useRoute()
@@ -458,14 +461,17 @@ function buildAiExtraFields(result, excludedKeys = []) {
 
 function outputSchemaFields(outputSchema) {
   if (Array.isArray(outputSchema?.fields)) {
-    return outputSchema.fields
+    return outputSchema.fields.map((field) => ({
+      ...field,
+      label: field.label || AI_FIELD_LABELS[field.key] || field.key,
+    }))
   }
   if (!outputSchema || typeof outputSchema !== 'object' || Array.isArray(outputSchema)) {
     return []
   }
   return Object.entries(outputSchema).map(([key, sampleValue]) => ({
     key,
-    label: key,
+    label: AI_FIELD_LABELS[key] || key,
     type: inferAiFieldType(sampleValue),
   }))
 }
