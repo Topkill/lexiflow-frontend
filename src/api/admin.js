@@ -86,6 +86,10 @@ export function fetchWordImportTask(importTaskId) {
   return http.get(`/api/v1/admin/imports/${importTaskId}`)
 }
 
+export function fetchWordImportTasks(params = {}) {
+  return http.get('/api/v1/admin/imports', { params })
+}
+
 export function fetchWordImportErrors(importTaskId, params = {}) {
   return http.get(`/api/v1/admin/imports/${importTaskId}/errors`, { params })
 }

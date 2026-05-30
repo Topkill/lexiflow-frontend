@@ -9,11 +9,13 @@ import {
   downloadWordImportTemplate,
   fetchAdminWordbooks,
   fetchWordImportErrors,
+  fetchWordImportTasks,
   importAdminWords,
   importAdminWordsFromJsonUrl,
 } from '../../api/admin'
 
 const loadingWordbooks = ref(false)
+const loadingImportTasks = ref(false)
 const uploading = ref(false)
 const importingJson = ref(false)
 const downloading = ref(false)
@@ -27,6 +29,7 @@ const wordbooks = ref([])
 const selectedFile = ref(null)
 const uploadRef = ref()
 const importTask = ref(null)
+const importTaskPage = ref({ records: [], total: 0, page: 1, size: 5 })
 const errorPage = ref({ records: [], total: 0, page: 1, size: 20 })
 
 function saveBlob(response, fallbackName) {
@@ -102,7 +105,7 @@ async function submitImport() {
     }
     resetUploadFile()
     await loadWordbooks()
-    await loadErrors(1)
+    await loadImportTasks(1, importTask.value)
   } finally {
     uploading.value = false
   }
@@ -147,9 +150,38 @@ async function submitJsonImport() {
       ElMessage.success('JSON 导入完成')
     }
     await loadWordbooks()
-    await loadErrors(1)
+    await loadImportTasks(1, importTask.value)
   } finally {
     importingJson.value = false
+  }
+}
+
+function getTaskStatusType(task) {
+  if (task.status === 'FAILED') return 'danger'
+  if (task.status === 'PARTIAL_SUCCESS' || task.failedRows) return 'warning'
+  if (task.status === 'RUNNING' || task.status === 'PENDING') return 'info'
+  return 'success'
+}
+
+async function loadImportTasks(currentPage = importTaskPage.value.page, preferredTask = null) {
+  loadingImportTasks.value = true
+  try {
+    const page = await fetchWordImportTasks({ page: currentPage, size: importTaskPage.value.size })
+    const records = page.records || []
+    importTaskPage.value = {
+      records,
+      total: page.total || 0,
+      page: page.page || currentPage,
+      size: page.size || importTaskPage.value.size,
+    }
+    const selectedTask = (preferredTask && records.find((task) => task.id === preferredTask.id))
+      || records.find((task) => task.id === importTask.value?.id)
+      || records[0]
+      || null
+    importTask.value = selectedTask
+    await loadErrors(1)
+  } finally {
+    loadingImportTasks.value = false
   }
 }
 
@@ -165,19 +197,32 @@ async function handleErrorPageChange(currentPage) {
   await loadErrors(currentPage)
 }
 
-async function downloadErrorReport() {
-  if (!importTask.value?.id) return
-  const response = await downloadWordImportErrorReport(importTask.value.id)
-  saveBlob(response, `lexiflow-word-import-errors-${importTask.value.id}.xlsx`)
+async function selectImportTask(task) {
+  importTask.value = task
+  await loadErrors(1)
 }
 
-onMounted(loadWordbooks)
+async function handleTaskPageChange(currentPage) {
+  await loadImportTasks(currentPage)
+}
+
+async function downloadErrorReport(task = importTask.value) {
+  if (!task?.id) return
+  const response = await downloadWordImportErrorReport(task.id)
+  saveBlob(response, `lexiflow-word-import-errors-${task.id}.xlsx`)
+}
+
+async function loadPageData() {
+  await Promise.all([loadWordbooks(), loadImportTasks(1)])
+}
+
+onMounted(loadPageData)
 </script>
 
 <template>
   <section>
     <PageHeader title="单词导入" subtitle="支持模板 Excel 上传，也支持从 JSON URL 导入词库单词">
-      <el-button :icon="Refresh" @click="loadWordbooks">刷新词库</el-button>
+      <el-button :icon="Refresh" @click="loadPageData">刷新数据</el-button>
       <el-button :icon="Download" :loading="downloading" @click="downloadTemplate">下载模板</el-button>
     </PageHeader>
 
@@ -247,29 +292,45 @@ onMounted(loadWordbooks)
         </el-form>
       </el-card>
 
-      <el-card class="panel-card" shadow="never">
+      <el-card v-loading="loadingImportTasks" class="panel-card import-task-card" shadow="never">
         <template #header>最近导入结果</template>
-        <EmptyState v-if="!importTask" title="暂无导入结果" description="上传模板文件后会在这里展示成功、失败和错误报告入口。" />
+        <EmptyState v-if="!importTaskPage.records.length" title="暂无导入结果" description="导入完成后会在这里展示成功、失败和错误报告入口。" />
         <template v-else>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="任务 ID">{{ importTask.id }}</el-descriptions-item>
-            <el-descriptions-item label="文件名">{{ importTask.fileName }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <el-tag :type="importTask.failedRows ? 'warning' : 'success'">{{ importTask.status }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="总行数">{{ importTask.totalRows }}</el-descriptions-item>
-            <el-descriptions-item label="成功行数">{{ importTask.successRows }}</el-descriptions-item>
-            <el-descriptions-item label="失败行数">{{ importTask.failedRows }}</el-descriptions-item>
-          </el-descriptions>
-          <div class="button-row mt-16">
-            <el-button v-if="importTask.failedRows" :icon="Download" @click="downloadErrorReport">下载错误报告</el-button>
+          <el-table :data="importTaskPage.records" row-key="id">
+            <el-table-column prop="id" label="任务 ID" width="90" />
+            <el-table-column prop="fileName" label="文件名" min-width="220" show-overflow-tooltip />
+            <el-table-column label="状态" width="130">
+              <template #default="{ row }">
+                <el-tag :type="getTaskStatusType(row)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="totalRows" label="总数" width="80" />
+            <el-table-column prop="successRows" label="成功" width="80" />
+            <el-table-column prop="failedRows" label="失败" width="80" />
+            <el-table-column prop="createdAt" label="创建时间" min-width="160" />
+            <el-table-column label="操作" width="170" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click.stop="selectImportTask(row)">{{ row.failedRows ? '查看错误' : '查看' }}</el-button>
+                <el-button v-if="row.failedRows" size="small" :icon="Download" @click.stop="downloadErrorReport(row)">报告</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="importTaskPage.total > importTaskPage.size" class="pagination-row">
+            <el-pagination
+              background
+              layout="total, prev, pager, next"
+              :current-page="Number(importTaskPage.page)"
+              :page-size="Number(importTaskPage.size)"
+              :total="Number(importTaskPage.total)"
+              @current-change="handleTaskPageChange"
+            />
           </div>
         </template>
       </el-card>
     </div>
 
     <el-card v-if="importTask?.failedRows" class="panel-card mt-16" shadow="never">
-      <template #header>错误明细</template>
+      <template #header>错误明细：任务 #{{ importTask.id }}</template>
       <EmptyState v-if="errorPage.records.length === 0" title="暂无错误明细" />
       <template v-else>
         <el-table :data="errorPage.records">
@@ -292,3 +353,9 @@ onMounted(loadWordbooks)
     </el-card>
   </section>
 </template>
+
+<style scoped>
+.import-task-card {
+  grid-column: 1 / -1;
+}
+</style>
