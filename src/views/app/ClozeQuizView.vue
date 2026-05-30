@@ -129,6 +129,7 @@ const clozePassageParts = computed(() => {
 const totalCount = computed(() => todayTask.value?.items?.length || 0)
 const taskDone = computed(() => todayTask.value?.status === 'DONE')
 const completedGroupReady = computed(() => taskDone.value && totalCount.value > 0)
+const hasGeneratedQuiz = computed(() => Boolean(quiz.value?.quizId || todayTask.value?.clozeQuizId))
 const generateDisabled = computed(() => generating.value || (form.sourceType === 'COMPLETED_GROUP' && !completedGroupReady.value))
 const canContinueStudy = computed(() => todayTask.value?.status !== 'DONE' || todayTask.value?.clozeAttempted || Boolean(attempt.value))
 const generateHint = computed(() => {
@@ -407,7 +408,7 @@ async function generateQuiz() {
   }
   generating.value = true
   generateError.value = ''
-  const shouldRegenerate = Boolean(quiz.value?.quizId)
+  const shouldRegenerate = hasGeneratedQuiz.value
   try {
     resetQuizState()
     const task = await createClozeTask({
@@ -419,6 +420,10 @@ async function generateQuiz() {
     const quizId = task.resultId
     if (!quizId) {
       throw new Error('完形填空生成成功，但没有返回题目 ID')
+    }
+    if (todayTask.value) {
+      todayTask.value.clozeGenerated = true
+      todayTask.value.clozeQuizId = quizId
     }
     await loadQuizById(quizId)
     router.replace({ path: '/app/cloze', query: { quizId } })
@@ -1280,7 +1285,7 @@ onBeforeUnmount(() => {
                   <el-input-number v-model="form.targetWordCount" :min="5" :max="10" :step="1" controls-position="right" />
                 </el-form-item>
                 <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
-                  {{ quiz ? '重新生成练习' : '生成练习' }}
+                  {{ hasGeneratedQuiz ? '重新生成练习' : '生成练习' }}
                 </el-button>
               </div>
             </el-form>
@@ -1564,7 +1569,9 @@ onBeforeUnmount(() => {
               title="还没有练习"
               :description="generateError || (isWrongPracticeTask ? '可以基于本组错词生成 10 空完形填空。' : '完成一组单词后，系统会优先用本组错词和复习词生成 10 空完形填空。')"
             >
-              <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">生成练习</el-button>
+              <el-button type="primary" :loading="generating" :disabled="generateDisabled" @click="generateQuiz">
+                {{ hasGeneratedQuiz ? '重新生成练习' : '生成练习' }}
+              </el-button>
               <el-button v-if="isWrongPracticeTask" @click="router.push('/app/wrong-words')">返回错词本</el-button>
               <el-button v-else :disabled="!canContinueStudy" @click="router.push('/app/study')">
                 去背单词
