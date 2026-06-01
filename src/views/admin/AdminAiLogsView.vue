@@ -7,7 +7,13 @@ import { fetchAdminAiLogs } from '../../api/admin'
 
 const scopeOptions = ['PUBLIC', 'PRIVATE']
 const statusOptions = ['SUCCESS', 'FAILED']
-const contentTypeOptions = ['WORD_QA', 'CLOZE', 'REPORT', 'EXPLANATION', 'EXAMPLES', 'MNEMONIC']
+const contentTypeOptions = ['WORD_QA', 'CLOZE', 'CLOZE_REVIEW', 'REPORT']
+const contentTypeLabels = {
+  WORD_QA: 'AI 问答',
+  CLOZE: 'AI 完形填空',
+  CLOZE_REVIEW: 'AI 评阅',
+  REPORT: 'AI 报告',
+}
 const promptFeatureLabels = {
   WORD_QA: 'AI 问答',
   CLOZE_QUIZ: 'AI 完形填空',
@@ -104,7 +110,7 @@ onMounted(loadData)
           <el-option v-for="item in scopeOptions" :key="item" :label="item" :value="item" />
         </el-select>
         <el-select v-model="filters.contentType" clearable filterable placeholder="内容类型" @change="searchLogs">
-          <el-option v-for="item in contentTypeOptions" :key="item" :label="item" :value="item" />
+          <el-option v-for="item in contentTypeOptions" :key="item" :label="contentTypeLabels[item] || item" :value="item" />
         </el-select>
         <el-select v-model="filters.status" clearable placeholder="状态" @change="searchLogs">
           <el-option v-for="item in statusOptions" :key="item" :label="item" :value="item" />
