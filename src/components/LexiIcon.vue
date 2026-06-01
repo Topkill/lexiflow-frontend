@@ -60,6 +60,13 @@ defineProps({
     <g v-else-if="name === 'star'" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
       <path d="m12 3.5 2.55 5.17 5.7.83-4.13 4.03.97 5.68L12 16.52l-5.1 2.69.98-5.68L3.75 9.5l5.7-.83z" />
     </g>
+    <g v-else-if="name === 'note'" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <path d="M7 4.5h8.5l2.5 2.5v12.5H7A2.5 2.5 0 0 1 4.5 17V7A2.5 2.5 0 0 1 7 4.5Z" />
+      <path d="M15.5 4.5V7H18" />
+      <path d="M8 10.5h7" />
+      <path d="M8 14h6" />
+      <path d="M8 17.5h3.5" />
+    </g>
     <g v-else-if="name === 'chart'" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
       <path d="M4.5 19.5h15" />
       <path d="M7 16v-5" />

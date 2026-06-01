@@ -2,13 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Refresh } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../../stores/auth'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
+import StudyNoteDialog from '../../components/StudyNoteDialog.vue'
 import { askWordQuestion, createClozeTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
+import { createNote } from '../../api/notes'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
 
@@ -50,7 +52,13 @@ const aiReviewContent = ref(null)
 const aiReviewOutputSchema = ref(null)
 const aiReviewError = ref('')
 const aiReviewAttemptId = ref('')
+const aiReviewReviewId = ref('')
 const aiReviewCacheHit = ref(false)
+const aiReviewPanelRef = ref(null)
+const noteDialogVisible = ref(false)
+const noteSaving = ref(false)
+const noteDraft = ref(null)
+const noteSourcePayload = ref(null)
 const aiReviewMarkdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -71,6 +79,16 @@ const CLOZE_FORM_STORAGE_VERSION = 1
 const AI_QUOTA_EXHAUSTED_CODE = 40002
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 const AI_FIELD_LABELS = {
+  answer: '回答',
+  keyPoints: '要点',
+  relatedWords: '相关表达',
+  followUps: '继续追问',
+  overall: '总体评价',
+  mistakeTags: '错因标签',
+  strengths: '亮点',
+  weaknesses: '需要注意',
+  suggestions: '学习建议',
+  blankReviews: '逐空提醒',
   grammarTip: '语法小知识',
 }
 const queryTaskId = computed(() => route.query.taskId || '')
@@ -187,6 +205,11 @@ const aiReviewTagLabel = computed(() => {
   if (aiReviewState.value === 'loading') return '生成中'
   return '等待生成'
 })
+const canSaveAiReviewNote = computed(() => Boolean(
+  aiReviewState.value === 'done'
+  && aiReviewReviewId.value
+  && (aiReviewText.value.trim() || aiReviewContent.value),
+))
 
 function blankAnswer(blankId) {
   return wrongAnswerMap.value.get(String(blankId))
@@ -491,6 +514,7 @@ function resetAiReviewState() {
   aiReviewOutputSchema.value = null
   aiReviewError.value = ''
   aiReviewAttemptId.value = ''
+  aiReviewReviewId.value = ''
   aiReviewCacheHit.value = false
 }
 
@@ -523,6 +547,7 @@ async function loadOrStartAiReview(attemptId) {
 function applyAiReviewResponse(review) {
   if (!review) return false
   aiReviewAttemptId.value = String(review.attemptId || aiReviewAttemptId.value || '')
+  aiReviewReviewId.value = String(review.reviewId || aiReviewReviewId.value || '')
   aiReviewContent.value = review.content || null
   aiReviewOutputSchema.value = review.outputSchema || null
   aiReviewCacheHit.value = Boolean(review.cacheHit)
@@ -644,6 +669,7 @@ async function startAiReviewStream(attemptId, regenerate = false) {
   aiReviewContent.value = null
   aiReviewOutputSchema.value = null
   aiReviewError.value = ''
+  aiReviewReviewId.value = ''
   aiReviewCacheHit.value = false
   const controller = new AbortController()
   aiReviewAbortController = controller
@@ -793,6 +819,130 @@ function handleAiReviewSseEvent(event, data) {
     aiReviewState.value = 'failed'
     aiReviewError.value = normalizeAiQuotaMessage(data, data?.message || 'AI 评阅生成失败，请稍后重试')
   }
+}
+
+function openAiReviewNoteDialog(mode) {
+  if (!canSaveAiReviewNote.value) {
+    ElMessage.warning('等待 AI 评阅生成完成后再保存')
+    return
+  }
+  const quotedText = mode === 'selected'
+    ? selectedTextWithin(aiReviewPanelRef.value)
+    : buildAiReviewQuoteText()
+  if (!quotedText) {
+    ElMessage.warning(mode === 'selected' ? '请先选中要保存的 AI 评阅内容' : '暂无可保存的 AI 评阅内容')
+    return
+  }
+  noteSourcePayload.value = {
+    sourceType: 'CLOZE_REVIEW',
+    sourceId: toNumberOrNull(aiReviewReviewId.value),
+    wordbookId: toNumberOrNull(quiz.value?.wordbookId),
+    wordId: null,
+  }
+  noteDraft.value = {
+    title: '完形填空 AI 评阅摘录',
+    quotedText,
+    contentMd: '',
+  }
+  noteDialogVisible.value = true
+}
+
+async function saveAiReviewNote(payload) {
+  if (noteSaving.value || !noteSourcePayload.value) return
+  noteSaving.value = true
+  try {
+    await createNote({
+      ...noteSourcePayload.value,
+      title: payload.title,
+      quotedText: payload.quotedText,
+      contentMd: payload.contentMd,
+    })
+    ElMessage.success('已保存到笔记')
+    noteDialogVisible.value = false
+  } finally {
+    noteSaving.value = false
+  }
+}
+
+function buildAiReviewQuoteText() {
+  if (aiReviewText.value.trim()) {
+    return normalizeNoteQuoteText(aiReviewText.value)
+  }
+  const content = aiReviewContent.value || {}
+  const sections = []
+  for (const field of aiQuoteFields({ content, outputSchema: aiReviewOutputSchema.value }, [])) {
+    if (!hasAiDisplayValue(field.value)) continue
+    sections.push(formatNoteSection(field.label || field.key, field.value))
+  }
+  return normalizeNoteQuoteText(sections.join('\n\n'))
+}
+
+function aiQuoteFields(result, excludedKeys = []) {
+  const content = result?.content || {}
+  const excluded = new Set(excludedKeys)
+  const schemaFields = outputSchemaFields(result?.outputSchema)
+  const seen = new Set()
+  const fields = []
+  for (const field of schemaFields) {
+    if (!field?.key || excluded.has(field.key)) continue
+    seen.add(field.key)
+    fields.push({
+      key: field.key,
+      label: field.label || AI_FIELD_LABELS[field.key] || field.key,
+      value: content[field.key],
+    })
+  }
+  for (const key of Object.keys(content)) {
+    if (excluded.has(key) || seen.has(key)) continue
+    fields.push({
+      key,
+      label: AI_FIELD_LABELS[key] || key,
+      value: content[key],
+    })
+  }
+  return fields
+}
+
+function formatNoteSection(label, value) {
+  return `${label}\n${formatNoteValue(value)}`
+}
+
+function formatNoteValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => `- ${formatNoteValue(item).replace(/\n/g, '\n  ')}`).join('\n')
+  }
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
+  }
+  return String(value ?? '').trim()
+}
+
+function selectedTextWithin(root) {
+  const selection = window.getSelection?.()
+  if (!root || !selection || selection.isCollapsed || !selection.rangeCount) {
+    return ''
+  }
+  const range = selection.getRangeAt(0)
+  const container = range.commonAncestorContainer
+  const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container
+  if (!element || !root.contains(element)) {
+    return ''
+  }
+  return normalizeNoteQuoteText(selection.toString())
+}
+
+function normalizeNoteQuoteText(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function toNumberOrNull(value) {
+  if (value == null || value === '') return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
 }
 
 async function continueWrongPractice() {
@@ -1502,6 +1652,22 @@ onBeforeUnmount(() => {
                   <div class="blank-title-actions">
                     <el-tag :type="aiReviewTagType">{{ aiReviewTagLabel }}</el-tag>
                     <el-button
+                      size="small"
+                      :icon="DocumentAdd"
+                      :disabled="!canSaveAiReviewNote"
+                      @click="openAiReviewNoteDialog('whole')"
+                    >
+                      保存整段
+                    </el-button>
+                    <el-button
+                      size="small"
+                      :icon="DocumentAdd"
+                      :disabled="!canSaveAiReviewNote"
+                      @click="openAiReviewNoteDialog('selected')"
+                    >
+                      保存选中
+                    </el-button>
+                    <el-button
                       v-if="aiReviewState === 'failed'"
                       size="small"
                       plain
@@ -1512,7 +1678,7 @@ onBeforeUnmount(() => {
                     </el-button>
                   </div>
                 </div>
-                <div class="cloze-ai-review-text" :class="`is-${aiReviewState}`">
+                <div ref="aiReviewPanelRef" class="cloze-ai-review-text" :class="`is-${aiReviewState}`">
                   <template v-if="aiReviewState === 'loading' && !aiReviewText">
                     <div class="cloze-ai-review-loading">
                       <div class="cloze-ai-review-loading-row">
@@ -1702,5 +1868,14 @@ onBeforeUnmount(() => {
         <el-button type="primary" :loading="clozeAiLoading" :disabled="clozeAiLoading || clozeAiRegenerating" @click="askClozeAi(false)">开始提问</el-button>
       </EmptyState>
     </el-dialog>
+
+    <StudyNoteDialog
+      v-model="noteDialogVisible"
+      title="保存 AI 评阅摘录"
+      confirm-text="保存到笔记"
+      :initial-note="noteDraft || {}"
+      :saving="noteSaving"
+      @submit="saveAiReviewNote"
+    />
   </section>
 </template>

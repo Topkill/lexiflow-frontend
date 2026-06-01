@@ -1,13 +1,24 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { SwitchButton, User } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Memo, SwitchButton, User } from '@element-plus/icons-vue'
 import LexiIcon from '../components/LexiIcon.vue'
+import StudyNoteDialog from '../components/StudyNoteDialog.vue'
+import { createNote } from '../api/notes'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const quickNoteVisible = ref(false)
+const quickNoteSaving = ref(false)
+const quickNoteDraft = ref({
+  sourceType: 'NORMAL',
+  title: '',
+  quotedText: '',
+  contentMd: '',
+})
 
 const menuItems = [
   { path: '/app', label: '今日学习', icon: 'home' },
@@ -19,6 +30,7 @@ const menuItems = [
   { path: '/app/reports', label: '报告', icon: 'report' },
   { path: '/app/wrong-words', label: '错词', icon: 'warning' },
   { path: '/app/favorites', label: '收藏', icon: 'star' },
+  { path: '/app/notes', label: '笔记', icon: 'note' },
   { path: '/app/statistics', label: '统计', icon: 'chart' },
   { path: '/app/settings', label: '设置', icon: 'settings' },
   { path: '/app/ai-config', label: 'AI 配置', icon: 'ai' },
@@ -28,6 +40,36 @@ const activeMenu = computed(() => {
   const matched = [...menuItems].reverse().find((item) => route.path === item.path || route.path.startsWith(`${item.path}/`))
   return matched?.path || '/app'
 })
+
+function openQuickNote() {
+  quickNoteDraft.value = {
+    sourceType: 'NORMAL',
+    title: '',
+    quotedText: '',
+    contentMd: '',
+  }
+  quickNoteVisible.value = true
+}
+
+async function saveQuickNote(payload) {
+  if (quickNoteSaving.value) return
+  quickNoteSaving.value = true
+  try {
+    await createNote({
+      sourceType: 'NORMAL',
+      sourceId: null,
+      wordbookId: null,
+      wordId: null,
+      title: payload.title,
+      quotedText: payload.quotedText,
+      contentMd: payload.contentMd,
+    })
+    ElMessage.success('笔记已创建')
+    quickNoteVisible.value = false
+  } finally {
+    quickNoteSaving.value = false
+  }
+}
 
 async function handleLogout() {
   await auth.logout()
@@ -61,6 +103,11 @@ async function handleLogout() {
           <div class="topbar-date">{{ new Date().toLocaleDateString('zh-CN') }}</div>
         </div>
         <div class="topbar-actions">
+          <el-tooltip content="记笔记" placement="bottom" effect="light">
+            <el-button class="quick-note-button" :icon="Memo" @click="openQuickNote">
+              <span class="quick-note-label">记笔记</span>
+            </el-button>
+          </el-tooltip>
           <el-button v-if="auth.isAdmin" text @click="router.push('/admin')">后台</el-button>
           <el-dropdown trigger="click">
             <el-button class="user-button">
@@ -91,5 +138,14 @@ async function handleLogout() {
         <RouterView />
       </main>
     </section>
+
+    <StudyNoteDialog
+      v-model="quickNoteVisible"
+      title="新建笔记"
+      confirm-text="创建笔记"
+      :initial-note="quickNoteDraft"
+      :saving="quickNoteSaving"
+      @submit="saveQuickNote"
+    />
   </div>
 </template>

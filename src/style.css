@@ -3809,6 +3809,118 @@ body.study-ai-dialog-open .app-main .content-wrap {
   margin-top: 16px;
 }
 
+.ai-result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.study-note-list {
+  display: grid;
+  gap: 12px;
+}
+
+.study-note-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgba(89, 197, 179, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.82);
+}
+
+.study-note-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.study-note-item-head,
+.study-note-actions,
+.study-note-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.study-note-item-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.study-note-item-head h2 {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.study-note-quote,
+.study-note-quote-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #315d58;
+  line-height: 1.7;
+}
+
+.study-note-quote {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--app-primary, var(--primary));
+  border-radius: 6px;
+  background: rgba(226, 248, 245, 0.62);
+}
+
+.study-note-quote-preview {
+  width: 100%;
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(89, 197, 179, 0.22);
+  border-radius: 8px;
+  background: rgba(226, 248, 245, 0.48);
+}
+
+.study-note-content-preview,
+.study-note-md-preview {
+  color: var(--text);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.study-note-content-preview :where(p, ul, ol, blockquote, pre),
+.study-note-md-preview :where(p, ul, ol, blockquote, pre) {
+  margin: 0 0 8px;
+}
+
+.study-note-content-preview :where(p, ul, ol, blockquote, pre):last-child,
+.study-note-md-preview :where(p, ul, ol, blockquote, pre):last-child {
+  margin-bottom: 0;
+}
+
+.study-note-md-preview {
+  padding: 12px;
+  border: 1px solid rgba(89, 197, 179, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.72);
+}
+
+.study-note-meta {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.study-note-actions {
+  align-content: flex-start;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
 .form-two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4005,6 +4117,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
     width: auto;
     flex: 0 1 auto;
     justify-content: flex-end;
+    flex-wrap: nowrap;
     gap: 6px;
     margin-left: auto;
   }
@@ -4027,6 +4140,16 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
   .user-button {
     max-width: 168px;
+  }
+
+  .quick-note-button.el-button {
+    width: 34px;
+    min-width: 34px;
+    padding: 8px;
+  }
+
+  .quick-note-button .quick-note-label {
+    display: none;
   }
 
   .panel-card,
@@ -4334,6 +4457,16 @@ body.study-ai-dialog-open .app-main .content-wrap {
   .cloze-submit-row .el-button {
     width: 100%;
     margin-left: 0 !important;
+  }
+
+  .study-note-item,
+  .study-note-item-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .study-note-actions {
+    justify-content: flex-start;
   }
 }
 

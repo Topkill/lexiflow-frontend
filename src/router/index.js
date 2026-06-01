@@ -29,6 +29,7 @@ const routes = [
       { path: 'reports', name: 'reports', component: () => import('../views/app/StudyReportView.vue') },
       { path: 'wrong-words', name: 'wrongWords', component: () => import('../views/app/WrongWordsView.vue') },
       { path: 'favorites', name: 'favorites', component: () => import('../views/app/FavoriteWordsView.vue') },
+      { path: 'notes', name: 'notes', component: () => import('../views/app/NotesView.vue') },
       { path: 'statistics', name: 'statistics', component: () => import('../views/app/StatisticsView.vue') },
       { path: 'settings', name: 'settings', component: () => import('../views/app/SettingsView.vue') },
       { path: 'ai-config', name: 'aiConfig', component: () => import('../views/app/AiConfigView.vue') },

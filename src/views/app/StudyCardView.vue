@@ -2,13 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Calendar, ChatLineRound, Cpu, Refresh } from '@element-plus/icons-vue'
+import { Calendar, ChatLineRound, Cpu, DocumentAdd, Refresh } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import LexiIcon from '../../components/LexiIcon.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
+import StudyNoteDialog from '../../components/StudyNoteDialog.vue'
 import { askWordQuestion, createClozeTask, streamWordQuestion } from '../../api/ai'
+import { createNote } from '../../api/notes'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
@@ -35,6 +37,10 @@ const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 const SEGMENT_SPLIT_THRESHOLD = 10
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 const AI_FIELD_LABELS = {
+  answer: '回答',
+  keyPoints: '要点',
+  relatedWords: '相关表达',
+  followUps: '继续追问',
   grammarTip: '语法小知识',
 }
 
@@ -73,6 +79,11 @@ const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiStreaming = ref(false)
 const aiResult = ref(null)
+const aiContentPanelRef = ref(null)
+const noteDialogVisible = ref(false)
+const noteSaving = ref(false)
+const noteDraft = ref(null)
+const noteSourcePayload = ref(null)
 const aiQuestion = ref('')
 const aiQuestionInputRef = ref(null)
 const aiMarkdown = new MarkdownIt({
@@ -176,6 +187,13 @@ const aiAnswerHtml = computed(() => {
   return answer ? aiMarkdown.render(answer) : ''
 })
 const aiExtraFields = computed(() => buildAiExtraFields(aiResult.value, ['answer', 'keyPoints', 'relatedWords', 'followUps']))
+const canSaveAiNote = computed(() => Boolean(
+  aiResult.value?.resultId
+  && aiResult.value?.content
+  && !aiLoading.value
+  && !aiRegenerating.value
+  && !aiStreaming.value,
+))
 const cardDefinitions = computed(() => {
   const transDefinitions = normalizeDefinitionEntries(card.value?.trans, card.value?.primaryPos)
   if (transDefinitions.length) return transDefinitions
@@ -1512,6 +1530,131 @@ async function hydrateAiResultFromCache(wordId, wordbookId, question) {
   return false
 }
 
+function openAiNoteDialog(mode) {
+  if (!canSaveAiNote.value) {
+    ElMessage.warning('等待 AI 回答生成完成后再保存')
+    return
+  }
+  const quotedText = mode === 'selected'
+    ? selectedTextWithin(aiContentPanelRef.value)
+    : buildWordAiQuoteText()
+  if (!quotedText) {
+    ElMessage.warning(mode === 'selected' ? '请先选中要保存的 AI 回答内容' : '暂无可保存的 AI 回答内容')
+    return
+  }
+  noteSourcePayload.value = {
+    sourceType: 'WORD_QA',
+    sourceId: toNumberOrNull(aiResult.value?.resultId),
+    wordbookId: toNumberOrNull(card.value?.wordbookId),
+    wordId: toNumberOrNull(card.value?.wordId),
+  }
+  noteDraft.value = {
+    title: `${card.value?.word || '单词'} 的 AI 问答摘录`,
+    quotedText,
+    contentMd: '',
+  }
+  noteDialogVisible.value = true
+}
+
+async function saveAiNote(payload) {
+  if (noteSaving.value || !noteSourcePayload.value) return
+  noteSaving.value = true
+  try {
+    await createNote({
+      ...noteSourcePayload.value,
+      title: payload.title,
+      quotedText: payload.quotedText,
+      contentMd: payload.contentMd,
+    })
+    ElMessage.success('已保存到笔记')
+    noteDialogVisible.value = false
+  } finally {
+    noteSaving.value = false
+  }
+}
+
+function buildWordAiQuoteText() {
+  const result = aiResult.value
+  const content = result?.content || {}
+  const sections = []
+  if (hasAiDisplayValue(content.answer)) {
+    sections.push(formatNoteSection('回答', content.answer))
+  }
+  for (const field of aiQuoteFields(result, ['answer'])) {
+    if (!hasAiDisplayValue(field.value)) continue
+    sections.push(formatNoteSection(field.label || field.key, field.value))
+  }
+  return normalizeNoteQuoteText(sections.join('\n\n'))
+}
+
+function aiQuoteFields(result, excludedKeys = []) {
+  const content = result?.content || {}
+  const excluded = new Set(excludedKeys)
+  const schemaFields = outputSchemaFields(result?.outputSchema)
+  const seen = new Set()
+  const fields = []
+  for (const field of schemaFields) {
+    if (!field?.key || excluded.has(field.key)) continue
+    seen.add(field.key)
+    fields.push({
+      key: field.key,
+      label: field.label || AI_FIELD_LABELS[field.key] || field.key,
+      value: content[field.key],
+    })
+  }
+  for (const key of Object.keys(content)) {
+    if (excluded.has(key) || seen.has(key)) continue
+    fields.push({
+      key,
+      label: AI_FIELD_LABELS[key] || key,
+      value: content[key],
+    })
+  }
+  return fields
+}
+
+function formatNoteSection(label, value) {
+  return `${label}\n${formatNoteValue(value)}`
+}
+
+function formatNoteValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => `- ${formatNoteValue(item).replace(/\n/g, '\n  ')}`).join('\n')
+  }
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
+  }
+  return String(value ?? '').trim()
+}
+
+function selectedTextWithin(root) {
+  const selection = window.getSelection?.()
+  if (!root || !selection || selection.isCollapsed || !selection.rangeCount) {
+    return ''
+  }
+  const range = selection.getRangeAt(0)
+  const container = range.commonAncestorContainer
+  const element = container.nodeType === Node.TEXT_NODE ? container.parentElement : container
+  if (!element || !root.contains(element)) {
+    return ''
+  }
+  return normalizeNoteQuoteText(selection.toString())
+}
+
+function normalizeNoteQuoteText(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function toNumberOrNull(value) {
+  if (value == null || value === '') return null
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
 function useFollowUp(question) {
   aiQuestion.value = question
   askAi(false)
@@ -1830,43 +1973,58 @@ onBeforeUnmount(() => {
         <div class="ai-content-panel">
           <div class="card-header-row">
             <el-tag :type="aiResult.cacheHit ? 'success' : 'info'">{{ aiStreaming ? '生成中' : (aiResult.cacheHit ? '缓存命中' : '新生成') }}</el-tag>
-            <el-button size="small" :icon="Refresh" :loading="aiRegenerating" :disabled="aiLoading || aiRegenerating || aiStreaming" @click="askAi(true)">重新回答</el-button>
+            <div class="blank-title-actions">
+              <el-button size="small" :icon="DocumentAdd" :disabled="!canSaveAiNote" @click="openAiNoteDialog('whole')">保存整段</el-button>
+              <el-button size="small" :icon="DocumentAdd" :disabled="!canSaveAiNote" @click="openAiNoteDialog('selected')">保存选中</el-button>
+              <el-button size="small" :icon="Refresh" :loading="aiRegenerating" :disabled="aiLoading || aiRegenerating || aiStreaming" @click="askAi(true)">重新回答</el-button>
+            </div>
           </div>
 
-          <div class="ai-brief ai-answer-markdown" v-html="aiAnswerHtml"></div>
-          <div v-if="aiResult.content.keyPoints?.length" class="ai-section">
-            <h3>要点</h3>
-            <ul><li v-for="item in aiResult.content.keyPoints" :key="item" v-html="renderAiInlineMarkdown(item)"></li></ul>
-          </div>
-          <div v-if="aiResult.content.relatedWords?.length" class="ai-section">
-            <h3>相关表达</h3>
-            <div class="ai-tag-row">
-              <el-tag v-for="item in aiResult.content.relatedWords" :key="item" effect="plain">{{ item }}</el-tag>
+          <div ref="aiContentPanelRef" class="ai-result-body">
+            <div class="ai-brief ai-answer-markdown" v-html="aiAnswerHtml"></div>
+            <div v-if="aiResult.content.keyPoints?.length" class="ai-section">
+              <h3>要点</h3>
+              <ul><li v-for="item in aiResult.content.keyPoints" :key="item" v-html="renderAiInlineMarkdown(item)"></li></ul>
             </div>
-          </div>
-          <div v-if="aiResult.content.followUps?.length" class="ai-section">
-            <h3>继续追问</h3>
-            <div class="ai-follow-row">
-              <el-button v-for="item in aiResult.content.followUps" :key="item" size="small" plain @click="useFollowUp(item)">
-                {{ item }}
-              </el-button>
+            <div v-if="aiResult.content.relatedWords?.length" class="ai-section">
+              <h3>相关表达</h3>
+              <div class="ai-tag-row">
+                <el-tag v-for="item in aiResult.content.relatedWords" :key="item" effect="plain">{{ item }}</el-tag>
+              </div>
             </div>
-          </div>
-          <div v-for="field in aiExtraFields" :key="field.key" class="ai-section">
-            <h3>{{ field.label || field.key }}</h3>
-            <div v-if="field.type === 'markdown'" class="ai-answer-markdown" v-html="field.html"></div>
-            <div v-else-if="field.type === 'tagList'" class="ai-tag-row">
-              <el-tag v-for="item in field.value" :key="item" effect="plain">{{ item }}</el-tag>
+            <div v-if="aiResult.content.followUps?.length" class="ai-section">
+              <h3>继续追问</h3>
+              <div class="ai-follow-row">
+                <el-button v-for="item in aiResult.content.followUps" :key="item" size="small" plain @click="useFollowUp(item)">
+                  {{ item }}
+                </el-button>
+              </div>
             </div>
-            <ul v-else-if="field.type === 'stringList'">
-              <li v-for="item in field.value" :key="item" v-html="renderAiInlineMarkdown(item)"></li>
-            </ul>
-            <pre v-else-if="field.type === 'object' || field.type === 'objectList' || field.type === 'json'" class="ai-json-field">{{ formatAiFieldValue(field.value) }}</pre>
-            <p v-else>{{ formatAiFieldValue(field.value) }}</p>
+            <div v-for="field in aiExtraFields" :key="field.key" class="ai-section">
+              <h3>{{ field.label || field.key }}</h3>
+              <div v-if="field.type === 'markdown'" class="ai-answer-markdown" v-html="field.html"></div>
+              <div v-else-if="field.type === 'tagList'" class="ai-tag-row">
+                <el-tag v-for="item in field.value" :key="item" effect="plain">{{ item }}</el-tag>
+              </div>
+              <ul v-else-if="field.type === 'stringList'">
+                <li v-for="item in field.value" :key="item" v-html="renderAiInlineMarkdown(item)"></li>
+              </ul>
+              <pre v-else-if="field.type === 'object' || field.type === 'objectList' || field.type === 'json'" class="ai-json-field">{{ formatAiFieldValue(field.value) }}</pre>
+              <p v-else>{{ formatAiFieldValue(field.value) }}</p>
+            </div>
           </div>
         </div>
       </template>
       <EmptyState v-else title="还没有提问" description="输入你对这个单词的疑问，例如反义词、语境差异或易混点。" />
     </el-dialog>
+
+    <StudyNoteDialog
+      v-model="noteDialogVisible"
+      title="保存 AI 问答摘录"
+      confirm-text="保存到笔记"
+      :initial-note="noteDraft || {}"
+      :saving="noteSaving"
+      @submit="saveAiNote"
+    />
   </section>
 </template>
