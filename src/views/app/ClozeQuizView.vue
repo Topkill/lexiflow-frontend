@@ -9,7 +9,7 @@ import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import StudyNoteDialog from '../../components/StudyNoteDialog.vue'
-import { askWordQuestion, createClozeTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
+import { askWordQuestion, createClozeTask, fetchAsyncTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { createNote } from '../../api/notes'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
@@ -59,6 +59,7 @@ const noteDialogVisible = ref(false)
 const noteSaving = ref(false)
 const noteDraft = ref(null)
 const noteSourcePayload = ref(null)
+const activeClozeTaskId = ref('')
 const aiReviewMarkdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -67,6 +68,7 @@ const aiReviewMarkdown = new MarkdownIt({
 let clozeClickTimer = null
 let lookupSelectionRaf = null
 let aiReviewAbortController = null
+let clozeTaskPollTimer = null
 const form = reactive({
   sourceType: 'COMPLETED_GROUP',
   targetWordCount: 10,
@@ -76,6 +78,9 @@ const CLOZE_DRAFT_STORAGE_PREFIX = 'lexiflow:cloze-draft:'
 const CLOZE_DRAFT_VERSION = 1
 const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
 const CLOZE_FORM_STORAGE_VERSION = 1
+const CLOZE_TASK_STORAGE_PREFIX = 'lexiflow:cloze-task:'
+const CLOZE_TASK_STORAGE_VERSION = 1
+const CLOZE_TASK_POLL_INTERVAL_MS = 2000
 const AI_QUOTA_EXHAUSTED_CODE = 40002
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 const AI_FIELD_LABELS = {
@@ -92,6 +97,7 @@ const AI_FIELD_LABELS = {
   grammarTip: '语法小知识',
 }
 const queryTaskId = computed(() => route.query.taskId || '')
+const queryClozeTaskId = computed(() => route.query.clozeTaskId || '')
 const isWrongPracticeTask = computed(() => todayTask.value?.taskType === 'WRONG_WORD_PRACTICE' || route.query.mode === 'wrong-practice')
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词完形填空' : 'AI 完形填空'))
 const pageSubtitle = computed(() => (isWrongPracticeTask.value ? '基于本组错词生成选词填空，可选完成' : '基于今日新词和错词生成选词填空'))
@@ -221,7 +227,7 @@ async function loadTodayTask() {
   loadError.value = ''
   try {
     todayTask.value = queryTaskId.value ? await fetchStudyTask(queryTaskId.value) : await fetchTodayTask()
-    if (!route.query.quizId && todayTask.value?.clozeQuizId && !todayTask.value?.clozeAttempted) {
+    if (!route.query.quizId && !queryClozeTaskId.value && todayTask.value?.clozeQuizId && !todayTask.value?.clozeAttempted) {
       await loadQuizById(todayTask.value.clozeQuizId)
       if (route.query.generateError) {
         generateError.value = ''
@@ -271,6 +277,10 @@ function clozeFormStorageKey(userId = getClozeStorageUserId()) {
   return userId ? `${CLOZE_FORM_STORAGE_PREFIX}${userId}` : ''
 }
 
+function clozeTaskStorageKey(userId = getClozeStorageUserId(), dailyTaskId = todayTask.value?.taskId) {
+  return userId && dailyTaskId ? `${CLOZE_TASK_STORAGE_PREFIX}${userId}:${dailyTaskId}` : ''
+}
+
 function normalizeTargetWordCount(value) {
   const count = Number(value)
   if (!Number.isFinite(count)) return 10
@@ -307,6 +317,57 @@ function restoreClozeFormPreferences() {
       // 清理失败不影响页面使用。
     }
   }
+}
+
+function saveActiveClozeTask(taskId) {
+  const storage = getClozeDraftStorage()
+  const key = clozeTaskStorageKey()
+  if (!storage || !key || !taskId || !todayTask.value?.taskId) return
+  try {
+    storage.setItem(key, JSON.stringify({
+      version: CLOZE_TASK_STORAGE_VERSION,
+      clozeTaskId: String(taskId),
+      dailyTaskId: String(todayTask.value.taskId),
+      sourceType: form.sourceType,
+      targetWordCount: normalizeTargetWordCount(form.targetWordCount),
+      updatedAt: Date.now(),
+    }))
+  } catch {
+    // 本地存储不可用时，仍然可以依靠当前页面轮询。
+  }
+}
+
+function clearActiveClozeTask(dailyTaskId = todayTask.value?.taskId) {
+  const storage = getClozeDraftStorage()
+  const key = clozeTaskStorageKey(getClozeStorageUserId(), dailyTaskId)
+  if (!storage || !key) return
+  try {
+    storage.removeItem(key)
+  } catch {
+    // 清理失败不影响任务状态查询。
+  }
+}
+
+function restoreActiveClozeTask() {
+  const storage = getClozeDraftStorage()
+  const key = clozeTaskStorageKey()
+  if (!storage || !key || !todayTask.value?.taskId || quiz.value) return false
+  let cache
+  try {
+    cache = JSON.parse(storage.getItem(key) || 'null')
+  } catch {
+    clearActiveClozeTask()
+    return false
+  }
+  if (!cache || cache.version !== CLOZE_TASK_STORAGE_VERSION || String(cache.dailyTaskId) !== String(todayTask.value.taskId) || !cache.clozeTaskId) {
+    return false
+  }
+  if (cache.sourceType && sourceOptions.value.some((option) => option.value === cache.sourceType)) {
+    form.sourceType = cache.sourceType
+  }
+  form.targetWordCount = normalizeTargetWordCount(cache.targetWordCount)
+  void startClozeTaskPolling(cache.clozeTaskId, { syncRoute: false })
+  return true
 }
 
 function serializeDraftAnswers() {
@@ -423,6 +484,98 @@ function normalizeAiQuotaMessage(errorOrData, fallback) {
   return isAiQuotaExhausted(errorOrData) ? AI_QUOTA_EXHAUSTED_MESSAGE : fallback
 }
 
+function stopClozeTaskPolling(resetGenerating = true) {
+  if (clozeTaskPollTimer) {
+    window.clearInterval(clozeTaskPollTimer)
+    clozeTaskPollTimer = null
+  }
+  activeClozeTaskId.value = ''
+  if (resetGenerating) {
+    generating.value = false
+  }
+}
+
+function updateClozeTaskRoute(taskId) {
+  router.replace({
+    path: '/app/cloze',
+    query: {
+      ...route.query,
+      clozeTaskId: taskId ? String(taskId) : undefined,
+      quizId: undefined,
+      generateError: undefined,
+    },
+  })
+}
+
+function updateClozeQuizRoute(quizId) {
+  router.replace({
+    path: '/app/cloze',
+    query: {
+      ...route.query,
+      quizId: String(quizId),
+      clozeTaskId: undefined,
+      generateError: undefined,
+    },
+  })
+}
+
+async function finishClozeTaskWithQuiz(quizId) {
+  stopClozeTaskPolling(false)
+  clearActiveClozeTask()
+  generating.value = false
+  if (todayTask.value) {
+    todayTask.value.clozeGenerated = true
+    todayTask.value.clozeQuizId = String(quizId)
+  }
+  await loadQuizById(quizId)
+  updateClozeQuizRoute(quizId)
+}
+
+async function pollClozeTask(taskId) {
+  if (!taskId) return
+  try {
+    const task = await fetchAsyncTask(taskId, { silentError: true })
+    const status = String(task?.status || '')
+    if (status === 'SUCCESS') {
+      if (!task.resultId) {
+        throw new Error('完形填空生成完成，但没有返回题目 ID')
+      }
+      await finishClozeTaskWithQuiz(task.resultId)
+      ElMessage.success('练习已生成')
+      return
+    }
+    if (status === 'FAILED') {
+      stopClozeTaskPolling()
+      clearActiveClozeTask()
+      generateError.value = 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。'
+      return
+    }
+    generating.value = true
+  } catch (error) {
+    stopClozeTaskPolling()
+    clearActiveClozeTask()
+    generateError.value = normalizeAiQuotaMessage(error, error?.message || '完形填空任务状态查询失败，请稍后重试。')
+  }
+}
+
+async function startClozeTaskPolling(taskId, options = {}) {
+  if (!taskId) return
+  stopClozeTaskPolling(false)
+  activeClozeTaskId.value = String(taskId)
+  generating.value = true
+  generateError.value = ''
+  saveActiveClozeTask(taskId)
+  if (options.syncRoute !== false) {
+    updateClozeTaskRoute(taskId)
+  }
+  await pollClozeTask(taskId)
+  if (generating.value && activeClozeTaskId.value === String(taskId) && !clozeTaskPollTimer) {
+    clozeTaskPollTimer = window.setInterval(() => {
+      void pollClozeTask(taskId)
+    }, CLOZE_TASK_POLL_INTERVAL_MS)
+  }
+}
+
 async function generateQuiz() {
   if (generating.value) return
   if (!todayTask.value?.taskId) {
@@ -445,24 +598,22 @@ async function generateQuiz() {
       regenerate: shouldRegenerate,
     }, { silentError: true })
     const quizId = task.resultId
-    if (!quizId) {
-      throw new Error('完形填空生成成功，但没有返回题目 ID')
+    if (quizId) {
+      await finishClozeTaskWithQuiz(quizId)
+      ElMessage.success('练习已生成')
+      return
     }
-    if (todayTask.value) {
-      todayTask.value.clozeGenerated = true
-      todayTask.value.clozeQuizId = quizId
+    if (!task.taskId) {
+      throw new Error('完形填空生成任务创建成功，但没有返回任务 ID')
     }
-    await loadQuizById(quizId)
-    router.replace({ path: '/app/cloze', query: { quizId } })
-    ElMessage.success('练习已生成')
+    await startClozeTaskPolling(task.taskId)
   } catch (error) {
+    stopClozeTaskPolling()
     if (error.code === 40001) {
       generateError.value = 'AI 配置不可用，请先检查公共配置或私有配置。'
     } else {
       generateError.value = normalizeAiQuotaMessage(error, 'AI 完形填空暂时生成失败，请稍后重试，或检查 AI 服务是否可访问。')
     }
-  } finally {
-    generating.value = false
   }
 }
 
@@ -1383,6 +1534,10 @@ onMounted(async () => {
   applyRouteGenerateError()
   if (route.query.quizId) {
     await loadQuizById(route.query.quizId)
+  } else if (queryClozeTaskId.value) {
+    await startClozeTaskPolling(queryClozeTaskId.value, { syncRoute: false })
+  } else {
+    restoreActiveClozeTask()
   }
   document.addEventListener('selectionchange', handlePassageSelectionChange)
   window.addEventListener('scroll', scheduleLookupSelectionUpdate, true)
@@ -1398,6 +1553,7 @@ onBeforeUnmount(() => {
     lookupSelectionRaf = null
   }
   abortAiReviewStream()
+  stopClozeTaskPolling(false)
   clearClozeClickTimer()
 })
 </script>
@@ -1457,7 +1613,7 @@ onBeforeUnmount(() => {
               <span></span>
             </div>
             <div>
-              <strong>正在生成必做完形填空</strong>
+              <strong>正在生成完形填空</strong>
               <p>AI 正在组织英文短文，系统会自动挖空并校验答案。</p>
             </div>
           </el-card>
@@ -1737,7 +1893,7 @@ onBeforeUnmount(() => {
             </div>
           </el-card>
 
-          <el-card v-else class="panel-card mt-16" shadow="never">
+          <el-card v-else-if="!generating" class="panel-card mt-16" shadow="never">
             <EmptyState
               title="还没有练习"
               :description="generateError || (isWrongPracticeTask ? '可以基于本组错词生成 10 空完形填空。' : '完成一组单词后，系统会优先用本组错词和复习词生成 10 空完形填空。')"

@@ -1318,6 +1318,8 @@ async function generateCompletedGroupCloze(taskId, extraQuery = {}) {
     )
     if (task.resultId) {
       router.push({ path: '/app/cloze', query: { quizId: task.resultId, auto: '1', ...extraQuery } })
+    } else if (task.taskId) {
+      router.push({ path: '/app/cloze', query: { clozeTaskId: task.taskId, auto: '1', ...extraQuery } })
     } else {
       await loadTask()
     }

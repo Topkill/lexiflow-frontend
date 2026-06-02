@@ -157,6 +157,10 @@ export function createClozeTask(payload, config = {}) {
   return http.post('/api/v1/ai/cloze-tasks', payload, { timeout: 120000, ...config })
 }
 
+export function fetchAsyncTask(taskId, config = {}) {
+  return http.get(`/api/v1/tasks/${taskId}`, config)
+}
+
 export function fetchClozeQuiz(quizId) {
   return http.get(`/api/v1/quizzes/cloze/${quizId}`)
 }
