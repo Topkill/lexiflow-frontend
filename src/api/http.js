@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { notifySessionExpired } from '../utils/sessionEvents'
 
 const TOKEN_KEY = 'lexiflow_access_token'
 const CSRF_KEY = 'lexiflow_csrf_token'
@@ -93,6 +94,7 @@ http.interceptors.response.use(
         return http(originalConfig)
       } catch (refreshError) {
         clearSession()
+        notifySessionExpired()
         if (!originalConfig.silentError) {
           ElMessage.error('登录已过期，请重新登录')
         }

@@ -1,9 +1,10 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { Lock, Message } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../../stores/auth'
+import { SESSION_EXPIRED_REASON } from '../../utils/sessionEvents'
 
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +16,7 @@ const form = reactive({
   email: '',
   password: '',
 })
+const sessionExpired = computed(() => route.query.reason === SESSION_EXPIRED_REASON)
 
 const rules = {
   email: [
@@ -56,6 +58,13 @@ async function submit() {
         </div>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="auth-form" @keyup.enter="submit">
+          <el-alert
+            v-if="sessionExpired"
+            title="登录状态已失效，请重新登录"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
           <el-form-item label="邮箱" prop="email">
             <el-input v-model.trim="form.email" size="large" placeholder="student@example.com">
               <template #prefix><el-icon><Message /></el-icon></template>

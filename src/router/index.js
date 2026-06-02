@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { SESSION_EXPIRED_REASON } from '../utils/sessionEvents'
 
 const routes = [
   { path: '/', redirect: '/app' },
@@ -69,10 +70,15 @@ router.beforeEach(async (to) => {
     return auth.isAuthenticated ? (auth.isAdmin ? '/admin' : '/app') : true
   }
 
+  const hadToken = Boolean(auth.accessToken)
   await auth.bootstrap()
 
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { path: '/login', query: { redirect: to.fullPath } }
+    const query = { redirect: to.fullPath }
+    if (hadToken) {
+      query.reason = SESSION_EXPIRED_REASON
+    }
+    return { path: '/login', query }
   }
   if (to.meta.requiresAdmin && !auth.isAdmin) {
     return '/app'
