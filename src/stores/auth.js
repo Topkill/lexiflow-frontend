@@ -46,13 +46,16 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem(CSRF_KEY)
       localStorage.removeItem(USER_KEY)
     },
-    async login(payload) {
-      const session = await authApi.login(payload)
+    async login(payload, config = {}) {
+      const session = await authApi.login(payload, config)
       this.setSession(session)
       return session
     },
     async register(payload) {
       return authApi.register(payload)
+    },
+    async fetchLoginCaptcha(config = {}) {
+      return authApi.fetchLoginCaptcha(config)
     },
     async refresh(config = {}) {
       const session = await authApi.refreshToken(config)

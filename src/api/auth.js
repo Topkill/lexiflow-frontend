@@ -1,7 +1,11 @@
 import { http } from './http'
 
-export function login(payload) {
-  return http.post('/api/v1/auth/login', payload)
+export function login(payload, config = {}) {
+  return http.post('/api/v1/auth/login', payload, config)
+}
+
+export function fetchLoginCaptcha(config = {}) {
+  return http.get('/api/v1/auth/login-captcha', config)
 }
 
 export function register(payload) {
