@@ -1,12 +1,14 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { createReportTask, fetchReport, fetchReports } from '../../api/ai'
+import { createReportTask, fetchAsyncTask, fetchReport, fetchReports } from '../../api/ai'
 import { fetchTodayTask } from '../../api/study'
+import { useAuthStore } from '../../stores/auth'
 
+const auth = useAuthStore()
 const loading = ref(false)
 const loadingTask = ref(false)
 const creating = ref(false)
@@ -14,8 +16,14 @@ const selectedReport = ref(null)
 const page = ref({ records: [], total: 0, page: 1, size: 10 })
 const todayTask = ref(null)
 const taskError = ref('')
+const reportTaskError = ref('')
+const activeReportTaskId = ref('')
 const form = reactive({ reportDate: new Date().toISOString().slice(0, 10) })
 const filters = reactive({ dateRange: [], page: 1, size: 10 })
+const REPORT_TASK_STORAGE_PREFIX = 'lexiflow:report-task:'
+const REPORT_TASK_STORAGE_VERSION = 1
+const REPORT_TASK_POLL_INTERVAL_MS = 2000
+let reportTaskPollTimer = null
 
 const summary = computed(() => selectedReport.value?.summary || {})
 const quizAccuracyText = computed(() => selectedReport.value?.quizAccuracy == null ? '暂无测验' : `${selectedReport.value.quizAccuracy}%`)
@@ -61,6 +69,127 @@ async function selectReport(report) {
   selectedReport.value = await fetchReport(report.id)
 }
 
+function getReportTaskStorage() {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage
+  } catch {
+    return null
+  }
+}
+
+function reportTaskStorageKey(userId = auth.user?.id) {
+  return userId ? `${REPORT_TASK_STORAGE_PREFIX}${userId}` : ''
+}
+
+function saveActiveReportTask(taskId) {
+  const storage = getReportTaskStorage()
+  const key = reportTaskStorageKey()
+  if (!storage || !key || !taskId) return
+  try {
+    storage.setItem(key, JSON.stringify({
+      version: REPORT_TASK_STORAGE_VERSION,
+      taskId: String(taskId),
+      dailyTaskId: todayTask.value?.taskId == null ? null : String(todayTask.value.taskId),
+      reportDate: form.reportDate,
+      updatedAt: Date.now(),
+    }))
+  } catch {
+    // 本地存储不可用时，当前页面仍会继续轮询。
+  }
+}
+
+function clearActiveReportTask() {
+  const storage = getReportTaskStorage()
+  const key = reportTaskStorageKey()
+  if (!storage || !key) return
+  try {
+    storage.removeItem(key)
+  } catch {
+    // 清理失败不影响任务查询。
+  }
+}
+
+function restoreActiveReportTask() {
+  const storage = getReportTaskStorage()
+  const key = reportTaskStorageKey()
+  if (!storage || !key) return false
+  let cache
+  try {
+    cache = JSON.parse(storage.getItem(key) || 'null')
+  } catch {
+    clearActiveReportTask()
+    return false
+  }
+  if (!cache || cache.version !== REPORT_TASK_STORAGE_VERSION || !cache.taskId) {
+    return false
+  }
+  form.reportDate = cache.reportDate || form.reportDate
+  void startReportTaskPolling(cache.taskId)
+  return true
+}
+
+function stopReportTaskPolling(resetCreating = true) {
+  if (reportTaskPollTimer) {
+    window.clearInterval(reportTaskPollTimer)
+    reportTaskPollTimer = null
+  }
+  activeReportTaskId.value = ''
+  if (resetCreating) {
+    creating.value = false
+  }
+}
+
+async function finishReportTask(reportId) {
+  stopReportTaskPolling(false)
+  clearActiveReportTask()
+  creating.value = false
+  selectedReport.value = await fetchReport(reportId)
+  filters.page = 1
+  await loadReports(false)
+  ElMessage.success('学习报告已生成')
+}
+
+async function pollReportTask(taskId) {
+  if (!taskId) return
+  try {
+    const task = await fetchAsyncTask(taskId, { silentError: true })
+    const status = String(task?.status || '')
+    if (status === 'SUCCESS') {
+      if (!task.resultId) {
+        throw new Error('学习报告生成完成，但没有返回报告 ID')
+      }
+      await finishReportTask(task.resultId)
+      return
+    }
+    if (status === 'FAILED') {
+      stopReportTaskPolling()
+      clearActiveReportTask()
+      reportTaskError.value = '学习报告生成失败，请稍后重试。'
+      return
+    }
+    creating.value = true
+  } catch (error) {
+    stopReportTaskPolling()
+    clearActiveReportTask()
+    reportTaskError.value = error?.message || '学习报告任务状态查询失败，请稍后重试。'
+  }
+}
+
+async function startReportTaskPolling(taskId) {
+  if (!taskId) return
+  stopReportTaskPolling(false)
+  activeReportTaskId.value = String(taskId)
+  creating.value = true
+  reportTaskError.value = ''
+  saveActiveReportTask(taskId)
+  await pollReportTask(taskId)
+  if (creating.value && activeReportTaskId.value === String(taskId) && !reportTaskPollTimer) {
+    reportTaskPollTimer = window.setInterval(() => {
+      void pollReportTask(taskId)
+    }, REPORT_TASK_POLL_INTERVAL_MS)
+  }
+}
+
 async function createReport() {
   if (creating.value) return
   if (!todayTask.value?.taskId) {
@@ -68,25 +197,35 @@ async function createReport() {
     return
   }
   creating.value = true
+  reportTaskError.value = ''
   try {
-    const task = await createReportTask({ dailyTaskId: todayTask.value.taskId, reportDate: form.reportDate })
+    const task = await createReportTask({ dailyTaskId: todayTask.value.taskId, reportDate: form.reportDate }, { silentError: true })
     if (task.resultId) {
-      selectedReport.value = await fetchReport(task.resultId)
+      await finishReportTask(task.resultId)
+      return
     }
-    filters.page = 1
-    await loadReports(false)
-    ElMessage.success('学习报告已生成')
-  } finally {
-    creating.value = false
+    if (!task.taskId) {
+      throw new Error('学习报告任务创建成功，但没有返回任务 ID')
+    }
+    await startReportTaskPolling(task.taskId)
+  } catch (error) {
+    stopReportTaskPolling()
+    reportTaskError.value = error?.message || '学习报告生成失败，请稍后重试。'
   }
 }
 
 onMounted(async () => {
   await Promise.all([loadTodayTask(), loadReports()])
+  restoreActiveReportTask()
+})
+
+onBeforeUnmount(() => {
+  stopReportTaskPolling(false)
 })
 
 async function refreshPage() {
   await Promise.all([loadTodayTask(), loadReports(false)])
+  restoreActiveReportTask()
 }
 
 function searchReports() {
@@ -121,9 +260,23 @@ function handleReportPageChange(currentPage) {
                 <el-date-picker v-model="form.reportDate" value-format="YYYY-MM-DD" type="date" class="full-input" />
               </el-form-item>
               <el-button class="report-create-button" type="primary" :loading="creating" :disabled="creating || !todayTask?.taskId" @click="createReport">
-                生成报告
+                {{ creating ? '生成中' : '生成报告' }}
               </el-button>
             </div>
+            <el-alert
+              v-if="activeReportTaskId && creating"
+              class="mb-16"
+              type="info"
+              :closable="false"
+              title="学习报告生成中，完成后会自动打开。"
+            />
+            <el-alert
+              v-if="reportTaskError"
+              class="mb-16"
+              type="warning"
+              :closable="false"
+              :title="reportTaskError"
+            />
             <el-alert
               v-if="taskError"
               class="mb-16"

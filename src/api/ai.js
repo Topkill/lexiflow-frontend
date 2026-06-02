@@ -173,8 +173,8 @@ export function fetchClozeAttemptAiReview(attemptId) {
   return http.get(`/api/v1/quizzes/cloze/attempts/${attemptId}/ai-review`)
 }
 
-export function createReportTask(payload) {
-  return http.post('/api/v1/ai/report-tasks', payload)
+export function createReportTask(payload, config = {}) {
+  return http.post('/api/v1/ai/report-tasks', payload, config)
 }
 
 export function fetchReports(params = {}) {
