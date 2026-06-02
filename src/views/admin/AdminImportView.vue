@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Refresh, Upload } from '@element-plus/icons-vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -9,10 +9,14 @@ import {
   downloadWordImportTemplate,
   fetchAdminWordbooks,
   fetchWordImportErrors,
+  fetchWordImportTask,
   fetchWordImportTasks,
   importAdminWords,
   importAdminWordsFromJsonUrl,
 } from '../../api/admin'
+
+const IMPORT_TASK_POLL_INTERVAL_MS = 2000
+const TERMINAL_IMPORT_STATUSES = new Set(['SUCCESS', 'PARTIAL_SUCCESS', 'FAILED'])
 
 const loadingWordbooks = ref(false)
 const loadingImportTasks = ref(false)
@@ -31,6 +35,8 @@ const uploadRef = ref()
 const importTask = ref(null)
 const importTaskPage = ref({ records: [], total: 0, page: 1, size: 5 })
 const errorPage = ref({ records: [], total: 0, page: 1, size: 20 })
+const importTaskPollTimer = ref(null)
+const pollingImportTaskId = ref('')
 
 function saveBlob(response, fallbackName) {
   const disposition = response.headers?.['content-disposition'] || ''
@@ -86,6 +92,70 @@ function resetUploadFile() {
   uploadRef.value?.clearFiles()
 }
 
+function isImportTaskTerminal(task) {
+  return !task?.status || TERMINAL_IMPORT_STATUSES.has(task.status)
+}
+
+function stopImportTaskPolling() {
+  if (importTaskPollTimer.value) {
+    window.clearInterval(importTaskPollTimer.value)
+    importTaskPollTimer.value = null
+  }
+  pollingImportTaskId.value = ''
+}
+
+function updateImportTaskInPage(task) {
+  const index = importTaskPage.value.records.findIndex((item) => item.id === task.id)
+  if (index >= 0) {
+    importTaskPage.value.records.splice(index, 1, task)
+  }
+}
+
+function showImportTaskFinished(task) {
+  if (task.status === 'FAILED') {
+    ElMessage.error(`导入任务 #${task.id} 执行失败`)
+    return
+  }
+  if (task.failedRows) {
+    ElMessage.warning(`导入任务 #${task.id} 完成，${task.failedRows} 行失败`)
+    return
+  }
+  ElMessage.success(`导入任务 #${task.id} 完成`)
+}
+
+async function pollImportTask(taskId) {
+  try {
+    const latestTask = await fetchWordImportTask(taskId)
+    const isSelectedTask = importTask.value?.id === latestTask.id
+    if (isSelectedTask) {
+      importTask.value = latestTask
+    }
+    updateImportTaskInPage(latestTask)
+    if (!isImportTaskTerminal(latestTask)) {
+      return
+    }
+    stopImportTaskPolling()
+    showImportTaskFinished(latestTask)
+    await loadWordbooks()
+    await loadImportTasks(importTaskPage.value.page, isSelectedTask ? latestTask : importTask.value)
+    if (isSelectedTask && latestTask.failedRows) {
+      await loadErrors(1)
+    }
+  } catch {
+    stopImportTaskPolling()
+  }
+}
+
+function startImportTaskPolling(task) {
+  stopImportTaskPolling()
+  if (!task?.id || isImportTaskTerminal(task)) {
+    return
+  }
+  pollingImportTaskId.value = task.id
+  pollImportTask(task.id)
+  importTaskPollTimer.value = window.setInterval(() => pollImportTask(task.id), IMPORT_TASK_POLL_INTERVAL_MS)
+}
+
 async function submitImport() {
   if (!excelWordbookId.value) {
     ElMessage.warning('请先选择词库')
@@ -98,14 +168,10 @@ async function submitImport() {
   uploading.value = true
   try {
     importTask.value = await importAdminWords(excelWordbookId.value, duplicateStrategy.value, selectedFile.value)
-    if (importTask.value.failedRows) {
-      ElMessage.warning(`导入完成，${importTask.value.failedRows} 行失败`)
-    } else {
-      ElMessage.success('导入完成')
-    }
+    ElMessage.success(`Excel 导入任务 #${importTask.value.id} 已提交`)
     resetUploadFile()
-    await loadWordbooks()
     await loadImportTasks(1, importTask.value)
+    startImportTaskPolling(importTask.value)
   } finally {
     uploading.value = false
   }
@@ -144,13 +210,9 @@ async function submitJsonImport() {
       duplicateStrategy: jsonDuplicateStrategy.value,
       replaceWordbook: replaceWordbook.value,
     })
-    if (importTask.value.failedRows) {
-      ElMessage.warning(`JSON 导入完成，${importTask.value.failedRows} 行失败`)
-    } else {
-      ElMessage.success('JSON 导入完成')
-    }
-    await loadWordbooks()
+    ElMessage.success(`JSON 导入任务 #${importTask.value.id} 已提交`)
     await loadImportTasks(1, importTask.value)
+    startImportTaskPolling(importTask.value)
   } finally {
     importingJson.value = false
   }
@@ -180,6 +242,9 @@ async function loadImportTasks(currentPage = importTaskPage.value.page, preferre
       || null
     importTask.value = selectedTask
     await loadErrors(1)
+    if (selectedTask && !isImportTaskTerminal(selectedTask) && !importTaskPollTimer.value) {
+      startImportTaskPolling(selectedTask)
+    }
   } finally {
     loadingImportTasks.value = false
   }
@@ -200,6 +265,13 @@ async function handleErrorPageChange(currentPage) {
 async function selectImportTask(task) {
   importTask.value = task
   await loadErrors(1)
+  if (isImportTaskTerminal(task)) {
+    if (pollingImportTaskId.value === task.id) {
+      stopImportTaskPolling()
+    }
+  } else {
+    startImportTaskPolling(task)
+  }
 }
 
 async function handleTaskPageChange(currentPage) {
@@ -217,6 +289,7 @@ async function loadPageData() {
 }
 
 onMounted(loadPageData)
+onBeforeUnmount(stopImportTaskPolling)
 </script>
 
 <template>
