@@ -7,6 +7,14 @@ export function askWordQuestion(wordId, payload, config = {}) {
   return http.post(`/api/v1/ai/words/${wordId}/questions`, payload, config)
 }
 
+export function createWordQuestionTask(wordId, payload, config = {}) {
+  return http.post(`/api/v1/ai/words/${wordId}/question-tasks`, payload, config)
+}
+
+export function fetchWordQuestionState(wordId, params = {}, config = {}) {
+  return http.get(`/api/v1/ai/words/${wordId}/questions/state`, { params, ...config })
+}
+
 export async function streamWordQuestion(wordId, payload, handlers = {}) {
   const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
   let response = await fetchWordQuestionStream(baseUrl, wordId, payload, handlers.signal)
@@ -171,6 +179,10 @@ export function submitClozeAttempt(quizId, payload) {
 
 export function fetchClozeAttemptAiReview(attemptId) {
   return http.get(`/api/v1/quizzes/cloze/attempts/${attemptId}/ai-review`)
+}
+
+export function createClozeAttemptAiReviewTask(attemptId, params = {}, config = {}) {
+  return http.post(`/api/v1/quizzes/cloze/attempts/${attemptId}/ai-review-tasks`, null, { params, ...config })
 }
 
 export function createReportTask(payload, config = {}) {

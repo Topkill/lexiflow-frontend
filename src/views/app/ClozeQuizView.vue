@@ -9,7 +9,7 @@ import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import StudyNoteDialog from '../../components/StudyNoteDialog.vue'
-import { askWordQuestion, createClozeTask, fetchAsyncTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
+import { askWordQuestion, createClozeAttemptAiReviewTask, createClozeTask, fetchAsyncTask, fetchClozeAttemptAiReview, fetchClozeQuiz, submitClozeAttempt } from '../../api/ai'
 import { createNote } from '../../api/notes'
 import { createWrongWordPractice, fetchStudyTask, fetchTodayTask } from '../../api/study'
 import { lookupWordInWordbook } from '../../api/wordbook'
@@ -54,6 +54,7 @@ const aiReviewError = ref('')
 const aiReviewAttemptId = ref('')
 const aiReviewReviewId = ref('')
 const aiReviewCacheHit = ref(false)
+const activeAiReviewTaskId = ref('')
 const aiReviewPanelRef = ref(null)
 const noteDialogVisible = ref(false)
 const noteSaving = ref(false)
@@ -68,6 +69,7 @@ const aiReviewMarkdown = new MarkdownIt({
 let clozeClickTimer = null
 let lookupSelectionRaf = null
 let aiReviewAbortController = null
+let aiReviewTaskPollTimer = null
 let clozeTaskPollTimer = null
 const form = reactive({
   sourceType: 'COMPLETED_GROUP',
@@ -658,6 +660,7 @@ async function submitAnswers() {
 
 function resetAiReviewState() {
   abortAiReviewStream()
+  stopAiReviewTaskPolling(false)
   aiReviewState.value = 'idle'
   aiReviewMessage.value = ''
   aiReviewText.value = ''
@@ -667,12 +670,24 @@ function resetAiReviewState() {
   aiReviewAttemptId.value = ''
   aiReviewReviewId.value = ''
   aiReviewCacheHit.value = false
+  activeAiReviewTaskId.value = ''
 }
 
 function abortAiReviewStream() {
   if (!aiReviewAbortController) return
   aiReviewAbortController.abort()
   aiReviewAbortController = null
+}
+
+function stopAiReviewTaskPolling(resetLoading = true) {
+  if (aiReviewTaskPollTimer) {
+    window.clearInterval(aiReviewTaskPollTimer)
+    aiReviewTaskPollTimer = null
+  }
+  activeAiReviewTaskId.value = ''
+  if (resetLoading && ['loading', 'streaming'].includes(aiReviewState.value)) {
+    aiReviewState.value = 'idle'
+  }
 }
 
 async function loadOrStartAiReview(attemptId) {
@@ -686,11 +701,15 @@ async function loadOrStartAiReview(attemptId) {
     if (applyAiReviewResponse(review)) {
       return
     }
+    if (review?.taskId && ['PENDING', 'RUNNING'].includes(String(review.taskStatus || review.status || ''))) {
+      await startAiReviewTaskPolling(review.taskId, id)
+      return
+    }
     if (review?.status === 'FAILED') {
       return
     }
   } catch {
-    // 查询失败时继续尝试流式生成，避免刷新恢复被一次普通查询阻塞。
+    // 查询失败时继续创建任务，避免恢复被一次普通查询阻塞。
   }
   void startAiReviewStream(id)
 }
@@ -702,6 +721,9 @@ function applyAiReviewResponse(review) {
   aiReviewContent.value = review.content || null
   aiReviewOutputSchema.value = review.outputSchema || null
   aiReviewCacheHit.value = Boolean(review.cacheHit)
+  if (review.taskId) {
+    activeAiReviewTaskId.value = String(review.taskId)
+  }
   if (review.status === 'DONE') {
     aiReviewState.value = 'done'
     aiReviewText.value = review.displayText || aiReviewText.value
@@ -813,6 +835,7 @@ async function startAiReviewStream(attemptId, regenerate = false) {
   const id = String(attemptId || '')
   if (!id) return
   abortAiReviewStream()
+  stopAiReviewTaskPolling(false)
   aiReviewAttemptId.value = id
   aiReviewState.value = 'loading'
   aiReviewMessage.value = '正在生成 AI 评阅'
@@ -822,30 +845,60 @@ async function startAiReviewStream(attemptId, regenerate = false) {
   aiReviewError.value = ''
   aiReviewReviewId.value = ''
   aiReviewCacheHit.value = false
-  const controller = new AbortController()
-  aiReviewAbortController = controller
   try {
-    const response = await fetch(buildAiReviewStreamUrl(id, regenerate), {
-      method: 'GET',
-      headers: buildAiReviewStreamHeaders(),
-      signal: controller.signal,
-      credentials: 'include',
-    })
-    if (!response.ok || !response.body) {
-      throw await readAiReviewStreamError(response)
+    const review = await createClozeAttemptAiReviewTask(id, { regenerate }, { silentError: true })
+    if (applyAiReviewResponse(review)) {
+      return
     }
-    await readAiReviewSse(response)
-    if (['loading', 'streaming'].includes(aiReviewState.value)) {
-      aiReviewState.value = aiReviewText.value ? 'done' : 'idle'
+    if (review?.status === 'FAILED') {
+      return
     }
+    if (!review?.taskId) {
+      throw new Error('AI 评阅任务创建成功，但没有返回任务 ID')
+    }
+    await startAiReviewTaskPolling(review.taskId, id)
   } catch (error) {
-    if (controller.signal.aborted) return
     aiReviewState.value = 'failed'
     aiReviewError.value = normalizeAiQuotaMessage(error, error?.message || 'AI 评阅生成失败，请稍后重试')
-  } finally {
-    if (aiReviewAbortController === controller) {
-      aiReviewAbortController = null
+  }
+}
+
+async function pollAiReviewTask(taskId, attemptId) {
+  try {
+    const task = await fetchAsyncTask(taskId, { silentError: true })
+    const status = String(task?.status || '')
+    if (status === 'SUCCESS') {
+      stopAiReviewTaskPolling(false)
+      const review = await fetchClozeAttemptAiReview(attemptId)
+      applyAiReviewResponse(review)
+      return
     }
+    if (status === 'FAILED') {
+      stopAiReviewTaskPolling()
+      aiReviewState.value = 'failed'
+      aiReviewError.value = task?.errorMessage || 'AI 评阅生成失败，请稍后重试'
+      return
+    }
+    aiReviewState.value = 'loading'
+    aiReviewMessage.value = task?.message || '正在生成 AI 评阅'
+  } catch (error) {
+    stopAiReviewTaskPolling()
+    aiReviewState.value = 'failed'
+    aiReviewError.value = error?.message || 'AI 评阅任务状态查询失败，请稍后重试'
+  }
+}
+
+async function startAiReviewTaskPolling(taskId, attemptId) {
+  if (!taskId) return
+  stopAiReviewTaskPolling(false)
+  activeAiReviewTaskId.value = String(taskId)
+  aiReviewState.value = 'loading'
+  aiReviewMessage.value = '正在生成 AI 评阅'
+  await pollAiReviewTask(taskId, attemptId)
+  if (activeAiReviewTaskId.value === String(taskId) && !aiReviewTaskPollTimer) {
+    aiReviewTaskPollTimer = window.setInterval(() => {
+      void pollAiReviewTask(taskId, attemptId)
+    }, CLOZE_TASK_POLL_INTERVAL_MS)
   }
 }
 
@@ -1553,6 +1606,7 @@ onBeforeUnmount(() => {
     lookupSelectionRaf = null
   }
   abortAiReviewStream()
+  stopAiReviewTaskPolling(false)
   stopClozeTaskPolling(false)
   clearClozeClickTimer()
 })

@@ -9,7 +9,7 @@ import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import StarterPanel from '../../components/StarterPanel.vue'
 import StudyNoteDialog from '../../components/StudyNoteDialog.vue'
-import { askWordQuestion, createClozeTask, streamWordQuestion } from '../../api/ai'
+import { createClozeTask, createWordQuestionTask, fetchAsyncTask, fetchWordQuestionState } from '../../api/ai'
 import { createNote } from '../../api/notes'
 import { deleteFavoriteWord, favoriteWord } from '../../api/review'
 import { createWrongWordPractice, fetchStudyTask, fetchTaskItemCard, fetchTodayTask, submitTaskFeedback } from '../../api/study'
@@ -35,6 +35,8 @@ const ITEM_TYPE_REVIEW = 'REVIEW'
 const ITEM_TYPE_EXTRA = 'EXTRA'
 const ITEM_TYPE_FLOW_ORDER = [ITEM_TYPE_NEW, ITEM_TYPE_REVIEW, ITEM_TYPE_EXTRA]
 const SEGMENT_SPLIT_THRESHOLD = 10
+const WORD_QA_TASK_STORAGE_VERSION = 1
+const WORD_QA_TASK_POLL_INTERVAL_MS = 2000
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
 const AI_FIELD_LABELS = {
   answer: '回答',
@@ -78,6 +80,7 @@ const aiDialogVisible = ref(false)
 const aiLoading = ref(false)
 const aiRegenerating = ref(false)
 const aiStreaming = ref(false)
+const activeAiTaskId = ref('')
 const aiResult = ref(null)
 const aiContentPanelRef = ref(null)
 const noteDialogVisible = ref(false)
@@ -103,7 +106,7 @@ const studyCardScrollRef = ref(null)
 const pronunciationLoadingType = ref('')
 let pronunciationAudio = null
 let lookupSelectionRaf = null
-let aiAbortController = null
+let aiTaskPollTimer = null
 
 const queryTaskId = computed(() => route.query.taskId || '')
 const queryMode = computed(() => route.query.mode || '')
@@ -1043,10 +1046,12 @@ async function loadCard() {
   const loadingItemId = currentItemIdString()
   cardLoading.value = true
   card.value = null
+  stopAiTaskPolling(false)
   try {
     card.value = await fetchTaskItemCard(currentItem.value.itemId)
     aiResult.value = null
     aiQuestion.value = ''
+    restoreActiveAiTaskForCard()
     const canKeepChoiceState = phase.value === PHASE_CONFIRM
       && choiceState.value !== CHOICE_IDLE
       && String(choiceItemId.value) === loadingItemId
@@ -1420,13 +1425,10 @@ async function askAi(regenerate = false) {
   }
   const wordId = card.value.wordId
   const wordbookId = card.value.wordbookId
-  if (aiAbortController) {
-    aiAbortController.abort()
-  }
-  aiAbortController = new AbortController()
+  stopAiTaskPolling(false)
   aiLoading.value = !regenerate
   aiRegenerating.value = regenerate
-  aiStreaming.value = true
+  aiStreaming.value = false
   aiResult.value = {
     cacheHit: false,
     contentType: 'WORD_QA',
@@ -1441,52 +1443,21 @@ async function askAi(regenerate = false) {
     outputSchema: null,
   }
   try {
-    const finalPayload = await streamWordQuestion(
-      wordId,
-      {
-        wordbookId,
-        question,
-        regenerate,
-      },
-      {
-        signal: aiAbortController.signal,
-        onStatus: (status) => {
-          if (status?.outputSchema && aiResult.value) {
-            aiResult.value.outputSchema = status.outputSchema
-          }
-          if (status?.status === 'CACHE_HIT') {
-            aiResult.value.cacheHit = true
-          }
-        },
-        onChunk: (text) => {
-          aiLoading.value = false
-          if (!text) return
-          aiResult.value.content.answer += text
-        },
-        onFieldItem: ({ field, item }) => {
-          appendAiFieldItem(field, item)
-        },
-        onDone: (payload) => {
-          if (payload?.content) {
-            aiResult.value = payload
-          }
-          aiLoading.value = false
-          aiRegenerating.value = false
-          aiStreaming.value = false
-        },
-      },
-    )
-    if (finalPayload?.content) {
-      aiResult.value = finalPayload
-    } else {
-      await hydrateAiResultFromCache(wordId, wordbookId, question)
+    const task = await createWordQuestionTask(wordId, {
+      wordbookId,
+      question,
+      regenerate,
+    }, { silentError: true })
+    if (task?.content) {
+      applyWordQaResponse(task)
+      clearActiveAiTask()
+      return
     }
+    if (!task?.taskId) {
+      throw new Error('AI 问答任务创建成功，但没有返回任务 ID')
+    }
+    await startAiTaskPolling(task.taskId, { wordId, wordbookId, question, regenerate })
   } catch (error) {
-    if (error?.name === 'AbortError') return
-    if (hasPartialAiAnswer()) {
-      const hydrated = await hydrateAiResultFromCache(wordId, wordbookId, question)
-      if (hydrated) return
-    }
     if (error.code === 40001 || error.message?.includes('AI 配置')) {
       ElMessage.warning('AI 配置不可用，请先检查公共配置或私有配置。')
     } else if (error.code === 40002 || error.status === 429 || error.message?.includes('配额')) {
@@ -1494,42 +1465,167 @@ async function askAi(regenerate = false) {
     } else {
       ElMessage.warning(error.message || 'AI 问答暂时不可用，请稍后重试。')
     }
+    clearActiveAiTask()
+    aiResult.value = null
   } finally {
+    if (!activeAiTaskId.value) {
+      aiLoading.value = false
+      aiRegenerating.value = false
+      aiStreaming.value = false
+    }
+  }
+}
+
+function wordQaTaskStorageKey() {
+  const userId = auth.user?.id || 'anonymous'
+  return `lexiflow:word-qa-task:${userId}`
+}
+
+function saveActiveAiTask(taskId, meta) {
+  activeAiTaskId.value = String(taskId || '')
+  if (!activeAiTaskId.value) return
+  try {
+    window.localStorage.setItem(wordQaTaskStorageKey(), JSON.stringify({
+      version: WORD_QA_TASK_STORAGE_VERSION,
+      taskId: activeAiTaskId.value,
+      wordId: String(meta.wordId),
+      wordbookId: String(meta.wordbookId),
+      question: meta.question,
+      regenerate: Boolean(meta.regenerate),
+      savedAt: Date.now(),
+    }))
+  } catch {
+    // localStorage 不可用时只保持本页状态。
+  }
+}
+
+function readActiveAiTask() {
+  try {
+    const raw = window.localStorage.getItem(wordQaTaskStorageKey())
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function clearActiveAiTask() {
+  activeAiTaskId.value = ''
+  try {
+    window.localStorage.removeItem(wordQaTaskStorageKey())
+  } catch {
+    // ignore
+  }
+}
+
+function stopAiTaskPolling(resetLoading = true) {
+  if (aiTaskPollTimer) {
+    window.clearInterval(aiTaskPollTimer)
+    aiTaskPollTimer = null
+  }
+  activeAiTaskId.value = ''
+  if (resetLoading) {
     aiLoading.value = false
     aiRegenerating.value = false
     aiStreaming.value = false
-    aiAbortController = null
   }
 }
 
-function appendAiFieldItem(field, item) {
-  if (!field || item == null || !aiResult.value?.content) return
-  if (!Array.isArray(aiResult.value.content[field])) {
-    aiResult.value.content[field] = []
-  }
-  aiResult.value.content[field].push(item)
+function applyWordQaResponse(payload) {
+  if (!payload?.content) return false
+  aiResult.value = payload
+  aiLoading.value = false
+  aiRegenerating.value = false
+  aiStreaming.value = false
+  return true
 }
 
-function hasPartialAiAnswer() {
-  return Boolean(aiResult.value?.content?.answer?.trim())
+async function loadWordQaState(meta) {
+  const payload = await fetchWordQuestionState(meta.wordId, {
+    wordbookId: meta.wordbookId,
+    question: meta.question,
+  }, { silentError: true })
+  return applyWordQaResponse(payload)
 }
 
-async function hydrateAiResultFromCache(wordId, wordbookId, question) {
-  if (!hasPartialAiAnswer()) return false
+async function pollAiTask(taskId, meta) {
   try {
-    const payload = await askWordQuestion(wordId, {
-      wordbookId,
-      question,
-      regenerate: false,
-    })
-    if (payload?.content) {
-      aiResult.value = payload
-      return true
+    const task = await fetchAsyncTask(taskId, { silentError: true })
+    const status = String(task?.status || '')
+    if (status === 'SUCCESS') {
+      const loaded = await loadWordQaState(meta)
+      stopAiTaskPolling(false)
+      clearActiveAiTask()
+      aiLoading.value = false
+      aiRegenerating.value = false
+      aiStreaming.value = false
+      if (!loaded) {
+        ElMessage.warning('AI 问答已完成，但暂时无法读取结果')
+      }
+      return
     }
-  } catch {
-    // 流式回答已经展示，补全失败时保留现有内容即可。
+    if (status === 'FAILED') {
+      stopAiTaskPolling()
+      clearActiveAiTask()
+      aiResult.value = null
+      ElMessage.warning(task?.errorMessage || 'AI 问答暂时不可用，请稍后重试。')
+      return
+    }
+    aiLoading.value = !meta.regenerate
+    aiRegenerating.value = Boolean(meta.regenerate)
+    aiStreaming.value = true
+  } catch (error) {
+    stopAiTaskPolling()
+    clearActiveAiTask()
+    aiResult.value = null
+    ElMessage.warning(error?.message || 'AI 问答任务状态查询失败，请稍后重试。')
   }
-  return false
+}
+
+async function startAiTaskPolling(taskId, meta) {
+  if (!taskId) return
+  stopAiTaskPolling(false)
+  saveActiveAiTask(taskId, meta)
+  aiQuestion.value = meta.question
+  aiDialogVisible.value = true
+  aiLoading.value = !meta.regenerate
+  aiRegenerating.value = Boolean(meta.regenerate)
+  aiStreaming.value = true
+  await pollAiTask(taskId, meta)
+  if (activeAiTaskId.value === String(taskId) && !aiTaskPollTimer) {
+    aiTaskPollTimer = window.setInterval(() => {
+      void pollAiTask(taskId, meta)
+    }, WORD_QA_TASK_POLL_INTERVAL_MS)
+  }
+}
+
+function restoreActiveAiTaskForCard() {
+  if (!card.value?.wordId || !card.value?.wordbookId) return
+  const cache = readActiveAiTask()
+  if (!cache || cache.version !== WORD_QA_TASK_STORAGE_VERSION || !cache.taskId) return
+  if (String(cache.wordId) !== String(card.value.wordId) || String(cache.wordbookId) !== String(card.value.wordbookId)) {
+    clearActiveAiTask()
+    return
+  }
+  aiQuestion.value = cache.question || aiQuestion.value
+  aiResult.value = {
+    cacheHit: false,
+    contentType: 'WORD_QA',
+    wordId: String(card.value.wordId),
+    wordbookId: String(card.value.wordbookId),
+    content: {
+      answer: '',
+      keyPoints: [],
+      relatedWords: [],
+      followUps: [],
+    },
+    outputSchema: null,
+  }
+  void startAiTaskPolling(cache.taskId, {
+    wordId: card.value.wordId,
+    wordbookId: card.value.wordbookId,
+    question: cache.question,
+    regenerate: Boolean(cache.regenerate),
+  })
 }
 
 function openAiNoteDialog(mode) {
@@ -1672,10 +1768,7 @@ watch(queryTaskId, (nextTaskId, previousTaskId) => {
 onMounted(loadTask)
 onBeforeUnmount(() => {
   stopPronunciation()
-  if (aiAbortController) {
-    aiAbortController.abort()
-    aiAbortController = null
-  }
+  stopAiTaskPolling(false)
   if (lookupSelectionRaf) {
     window.cancelAnimationFrame(lookupSelectionRaf)
     lookupSelectionRaf = null
