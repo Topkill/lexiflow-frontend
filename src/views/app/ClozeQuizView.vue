@@ -1197,6 +1197,20 @@ function handleOptionClick(option) {
   scheduleClozeClick(() => selectActiveAnswer(option))
 }
 
+function handleClozeKeydown(event) {
+  if (attempt.value || generating.value || submitting.value || !quiz.value) return
+  if (event.ctrlKey || event.metaKey || event.altKey) return
+  const target = event.target
+  if (target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return
+  const label = String(event.key || '').toUpperCase()
+  if (!/^[A-Z]$/.test(label)) return
+  const option = candidateOptions.value.find((candidate) => candidate.label === label)
+  if (!option) return
+  event.preventDefault()
+  clearClozeClickTimer()
+  selectActiveAnswer(option)
+}
+
 function handleOptionDoubleClick(option) {
   clearClozeClickTimer()
   if (!attempt.value) return
@@ -1609,12 +1623,14 @@ onMounted(async () => {
     restoreActiveClozeTask()
   }
   document.addEventListener('selectionchange', handlePassageSelectionChange)
+  window.addEventListener('keydown', handleClozeKeydown)
   window.addEventListener('scroll', scheduleLookupSelectionUpdate, true)
   window.addEventListener('resize', scheduleLookupSelectionUpdate)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('selectionchange', handlePassageSelectionChange)
+  window.removeEventListener('keydown', handleClozeKeydown)
   window.removeEventListener('scroll', scheduleLookupSelectionUpdate, true)
   window.removeEventListener('resize', scheduleLookupSelectionUpdate)
   if (lookupSelectionRaf) {

@@ -2635,8 +2635,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-inline-blank-wrap:hover .cloze-inline-hint-trigger,
-.cloze-inline-blank-wrap:focus-within .cloze-inline-hint-trigger,
-.cloze-inline-blank-wrap.active .cloze-inline-hint-trigger {
+.cloze-inline-blank-wrap:focus-within .cloze-inline-hint-trigger {
   opacity: 1;
   pointer-events: auto;
 }
