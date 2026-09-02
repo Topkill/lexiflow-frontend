@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Refresh } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Refresh, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../../stores/auth'
 import PageHeader from '../../components/PageHeader.vue'
@@ -76,6 +76,7 @@ const form = reactive({
   targetWordCount: 10,
 })
 const answers = reactive({})
+const hintLevels = reactive({})
 const CLOZE_DRAFT_STORAGE_PREFIX = 'lexiflow:cloze-draft:'
 const CLOZE_DRAFT_VERSION = 1
 const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
@@ -257,6 +258,7 @@ function resetQuizState() {
   closeLookup()
   resetAiReviewState()
   Object.keys(answers).forEach((key) => delete answers[key])
+  Object.keys(hintLevels).forEach((key) => delete hintLevels[key])
 }
 
 function getClozeDraftStorage() {
@@ -1201,6 +1203,27 @@ function handleOptionDoubleClick(option) {
   lookupByRawWord(option?.word)
 }
 
+function revealBlankHint(blank) {
+  if (attempt.value || !blank?.blankId) return
+  const key = String(blank.blankId)
+  hintLevels[key] = Math.min(2, Number(hintLevels[key] || 0) + 1)
+  selectedBlankId.value = blank.blankId
+}
+
+function blankHintText(blank) {
+  const level = Number(hintLevels[String(blank?.blankId)] || 0)
+  if (level <= 0) return ''
+  if (level === 1) return blank?.hintPos ? `词性：${blank.hintPos}` : '词性：暂无'
+  return blank?.hintDefinition ? `释义：${blank.hintDefinition}` : '释义：暂无'
+}
+
+function blankHintButtonText(blank) {
+  const level = Number(hintLevels[String(blank?.blankId)] || 0)
+  if (level <= 0) return '查看词性提示'
+  if (level === 1) return '查看中文释义'
+  return '已显示释义'
+}
+
 function handleBlankClick(blank) {
   scheduleClozeClick(() => setActiveBlank(blank))
 }
@@ -1695,23 +1718,36 @@ onBeforeUnmount(() => {
             </template>
 
             <div class="cloze-candidates">
-              <button
+              <div
                 v-for="option in candidateOptions"
                 :key="option.label"
-                class="cloze-option"
-                type="button"
-                :class="{
-                  selected: activeBlank && answers[activeBlank.blankId] === option.word,
-                  used: isOptionUsed(option.word),
-                  locked: Boolean(attempt),
-                }"
-                :aria-disabled="Boolean(attempt)"
-                @click="handleOptionClick(option)"
-                @dblclick.stop.prevent="handleOptionDoubleClick(option)"
+                class="cloze-option-wrap"
               >
-                <span>{{ option.label }}</span>
-                {{ option.word }}
-              </button>
+                <button
+                  class="cloze-option"
+                  type="button"
+                  :class="{
+                    selected: activeBlank && answers[activeBlank.blankId] === option.word,
+                    used: isOptionUsed(option.word),
+                    locked: Boolean(attempt),
+                  }"
+                  :aria-disabled="Boolean(attempt)"
+                  @click="handleOptionClick(option)"
+                  @dblclick.stop.prevent="handleOptionDoubleClick(option)"
+                >
+                  <span>{{ option.label }}</span>
+                  {{ option.word }}
+                </button>
+                <button
+                  class="cloze-option-lookup"
+                  type="button"
+                  title="查看释义"
+                  aria-label="查看释义"
+                  @click.stop="lookupByRawWord(option.word)"
+                >
+                  <el-icon><Search /></el-icon>
+                </button>
+              </div>
             </div>
 
             <div
@@ -1802,12 +1838,22 @@ onBeforeUnmount(() => {
                 <div class="cloze-active-actions">
                   <el-button
                     text
+                    :disabled="Number(hintLevels[String(activeBlank.blankId)] || 0) >= 2"
+                    @click="revealBlankHint(activeBlank)"
+                  >
+                    {{ blankHintButtonText(activeBlank) }}
+                  </el-button>
+                  <el-button
+                    text
                     :disabled="!answers[activeBlank.blankId]"
                     @click="clearAnswer(activeBlank)"
                   >
                     清空
                   </el-button>
                   <el-button v-if="hasFilledAnswers" text @click="clearAllAnswers">全部清空</el-button>
+                </div>
+                <div v-if="blankHintText(activeBlank)" class="cloze-hint-text">
+                  {{ blankHintText(activeBlank) }}
                 </div>
               </div>
               <div v-if="attempt" ref="resultRef" class="cloze-result-list" @mouseup="handlePassageSelectionChange" @keyup="handlePassageSelectionChange">

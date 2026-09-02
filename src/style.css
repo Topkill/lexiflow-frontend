@@ -2467,6 +2467,12 @@ body.study-ai-dialog-open .app-main .content-wrap {
   margin-bottom: 14px;
 }
 
+.cloze-option-wrap {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
 .cloze-option {
   display: inline-flex;
   align-items: center;
@@ -2509,6 +2515,26 @@ body.study-ai-dialog-open .app-main .content-wrap {
   border-color: var(--line);
   background: var(--panel);
   color: var(--text);
+}
+
+.cloze-option-lookup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cloze-option-lookup:hover {
+  border-color: #aab2bd;
+  color: var(--primary);
+  background: #f1f2f4;
 }
 
 .cloze-option span {
@@ -2776,6 +2802,13 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
 .cloze-active-actions .el-button {
   margin-left: 0 !important;
+}
+
+.cloze-hint-text {
+  flex-basis: 100%;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 13px;
 }
 
 .cloze-result-list {
