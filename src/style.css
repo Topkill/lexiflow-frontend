@@ -2468,9 +2468,9 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-option-wrap {
+  position: relative;
   display: inline-flex;
   align-items: stretch;
-  gap: 4px;
 }
 
 .cloze-option {
@@ -2478,7 +2478,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 6px 10px;
+  padding: 6px 30px 6px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -2518,23 +2518,36 @@ body.study-ai-dialog-open .app-main .content-wrap {
 }
 
 .cloze-option-lookup {
+  position: absolute;
+  top: 50%;
+  right: 5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  min-height: 34px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.18s ease, color 0.18s ease, background 0.18s ease;
 }
 
-.cloze-option-lookup:hover {
-  border-color: #aab2bd;
+.cloze-option-wrap:hover .cloze-option-lookup,
+.cloze-option-wrap:focus-within .cloze-option-lookup {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cloze-option-lookup:hover,
+.cloze-option-lookup:focus-visible {
   color: var(--primary);
-  background: #f1f2f4;
+  background: rgba(75, 85, 99, 0.1);
 }
 
 .cloze-option span {
@@ -2556,7 +2569,7 @@ body.study-ai-dialog-open .app-main .content-wrap {
   justify-content: center;
   min-width: 54px;
   min-height: 34px;
-  margin: 0 4px;
+  margin: 0;
   padding: 2px 10px;
   border: 1px solid rgba(75, 85, 99, 0.32);
   border-radius: 8px;
@@ -2589,6 +2602,85 @@ body.study-ai-dialog-open .app-main .content-wrap {
   background: #fee2e2;
   color: #b91c1c;
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.cloze-inline-blank-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  margin: 0 4px;
+  vertical-align: baseline;
+}
+
+.cloze-inline-hint-trigger {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border: 1px solid rgba(245, 158, 11, 0.34);
+  border-radius: 50%;
+  background: #fffaf0;
+  color: #b7791f;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(180, 116, 24, 0.14);
+  transition: opacity 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.cloze-inline-blank-wrap:hover .cloze-inline-hint-trigger,
+.cloze-inline-blank-wrap:focus-within .cloze-inline-hint-trigger,
+.cloze-inline-blank-wrap.active .cloze-inline-hint-trigger {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cloze-inline-hint-trigger:hover,
+.cloze-inline-hint-trigger:focus-visible {
+  border-color: rgba(217, 119, 6, 0.54);
+  background: #fff3d6;
+  color: #92400e;
+  outline: none;
+}
+
+.cloze-inline-hint-popover {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  z-index: 3;
+  min-width: 94px;
+  max-width: min(240px, 70vw);
+  padding: 7px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 7px;
+  background: #fffaf0;
+  color: #7c571d;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  white-space: normal;
+  box-shadow: 0 8px 20px rgba(93, 66, 20, 0.14);
+  transform: translateX(-50%);
+}
+
+.cloze-inline-hint-popover::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border-right: 1px solid rgba(245, 158, 11, 0.28);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+  background: #fffaf0;
+  content: '';
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .cloze-inline-blank.revealed {
@@ -2802,13 +2894,6 @@ body.study-ai-dialog-open .app-main .content-wrap {
 
 .cloze-active-actions .el-button {
   margin-left: 0 !important;
-}
-
-.cloze-hint-text {
-  flex-basis: 100%;
-  margin-top: 2px;
-  color: var(--text);
-  font-size: 13px;
 }
 
 .cloze-result-list {

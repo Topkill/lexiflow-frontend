@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Opportunity, Refresh, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../../stores/auth'
 import PageHeader from '../../components/PageHeader.vue'
@@ -1217,13 +1217,6 @@ function blankHintText(blank) {
   return blank?.hintDefinition ? `释义：${blank.hintDefinition}` : '释义：暂无'
 }
 
-function blankHintButtonText(blank) {
-  const level = Number(hintLevels[String(blank?.blankId)] || 0)
-  if (level <= 0) return '查看词性提示'
-  if (level === 1) return '查看中文释义'
-  return '已显示释义'
-}
-
 function handleBlankClick(blank) {
   scheduleClozeClick(() => setActiveBlank(blank))
 }
@@ -1758,24 +1751,46 @@ onBeforeUnmount(() => {
             >
               <template v-for="(part, index) in clozePassageParts" :key="index">
                 <span v-if="part.type === 'text'">{{ part.text }}</span>
-                <button
+                <span
                   v-else
-                  class="cloze-inline-blank"
-                  type="button"
-                  :class="{
-                    active: !attempt && String(selectedBlankId) === String(part.blank.blankId),
-                    answered: Boolean(answers[part.blank.blankId]),
-                    revealed: Boolean(attempt && showCorrectAnswers),
-                    correct: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === true,
-                    wrong: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === false,
-                    locked: Boolean(attempt),
-                  }"
-                  :aria-disabled="Boolean(attempt)"
-                  @click="handleBlankClick(part.blank)"
-                  @dblclick.stop.prevent="handleBlankDoubleClick(part.blank)"
+                  class="cloze-inline-blank-wrap"
+                  :class="{ active: !attempt && String(selectedBlankId) === String(part.blank.blankId) }"
                 >
-                  {{ inlineBlankLabel(part.blank) }}
-                </button>
+                  <button
+                    class="cloze-inline-blank"
+                    type="button"
+                    :class="{
+                      active: !attempt && String(selectedBlankId) === String(part.blank.blankId),
+                      answered: Boolean(answers[part.blank.blankId]),
+                      revealed: Boolean(attempt && showCorrectAnswers),
+                      correct: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === true,
+                      wrong: !showCorrectAnswers && blankAnswer(part.blank.blankId)?.correct === false,
+                      locked: Boolean(attempt),
+                    }"
+                    :aria-disabled="Boolean(attempt)"
+                    @click="handleBlankClick(part.blank)"
+                    @dblclick.stop.prevent="handleBlankDoubleClick(part.blank)"
+                  >
+                    {{ inlineBlankLabel(part.blank) }}
+                  </button>
+                  <button
+                    v-if="!attempt"
+                    class="cloze-inline-hint-trigger"
+                    type="button"
+                    title="查看提示"
+                    aria-label="查看提示"
+                    @click.stop="revealBlankHint(part.blank)"
+                  >
+                    <el-icon><Opportunity /></el-icon>
+                  </button>
+                  <span
+                    v-if="!attempt && String(selectedBlankId) === String(part.blank.blankId) && blankHintText(part.blank)"
+                    class="cloze-inline-hint-popover"
+                    role="status"
+                  >
+                    {{ blankHintText(part.blank) }}
+                  </span>
+                </span>
               </template>
             </div>
 
@@ -1838,22 +1853,12 @@ onBeforeUnmount(() => {
                 <div class="cloze-active-actions">
                   <el-button
                     text
-                    :disabled="Number(hintLevels[String(activeBlank.blankId)] || 0) >= 2"
-                    @click="revealBlankHint(activeBlank)"
-                  >
-                    {{ blankHintButtonText(activeBlank) }}
-                  </el-button>
-                  <el-button
-                    text
                     :disabled="!answers[activeBlank.blankId]"
                     @click="clearAnswer(activeBlank)"
                   >
                     清空
                   </el-button>
                   <el-button v-if="hasFilledAnswers" text @click="clearAllAnswers">全部清空</el-button>
-                </div>
-                <div v-if="blankHintText(activeBlank)" class="cloze-hint-text">
-                  {{ blankHintText(activeBlank) }}
                 </div>
               </div>
               <div v-if="attempt" ref="resultRef" class="cloze-result-list" @mouseup="handlePassageSelectionChange" @keyup="handlePassageSelectionChange">
