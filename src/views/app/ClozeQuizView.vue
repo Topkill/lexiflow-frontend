@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, Opportunity, Refresh, Search } from '@element-plus/icons-vue'
+import { ArrowRight, Calendar, ChatLineRound, Check, CircleClose, DocumentAdd, InfoFilled, Opportunity, Refresh, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { useAuthStore } from '../../stores/auth'
 import PageHeader from '../../components/PageHeader.vue'
@@ -61,6 +61,7 @@ const noteSaving = ref(false)
 const noteDraft = ref(null)
 const noteSourcePayload = ref(null)
 const activeClozeTaskId = ref('')
+const clozeOnboardingVisible = ref(false)
 const aiReviewMarkdown = new MarkdownIt({
   html: false,
   linkify: true,
@@ -83,6 +84,8 @@ const CLOZE_FORM_STORAGE_PREFIX = 'lexiflow:cloze-form:'
 const CLOZE_FORM_STORAGE_VERSION = 1
 const CLOZE_TASK_STORAGE_PREFIX = 'lexiflow:cloze-task:'
 const CLOZE_TASK_STORAGE_VERSION = 1
+const CLOZE_ONBOARDING_STORAGE_PREFIX = 'lexiflow:cloze-onboarding:'
+const CLOZE_ONBOARDING_VERSION = 1
 const CLOZE_TASK_POLL_INTERVAL_MS = 2000
 const AI_QUOTA_EXHAUSTED_CODE = 40002
 const AI_QUOTA_EXHAUSTED_MESSAGE = '今日公共 AI 调用次数已用完'
@@ -271,6 +274,33 @@ function getClozeDraftStorage() {
 
 function getClozeStorageUserId() {
   return auth.user?.id == null ? '' : String(auth.user.id)
+}
+
+function clozeOnboardingStorageKey(userId = getClozeStorageUserId()) {
+  return `${CLOZE_ONBOARDING_STORAGE_PREFIX}${CLOZE_ONBOARDING_VERSION}:${userId || 'guest'}`
+}
+
+function showClozeOnboardingIfNeeded() {
+  const storage = getClozeDraftStorage()
+  if (!storage || !todayTask.value) return
+  try {
+    if (storage.getItem(clozeOnboardingStorageKey()) === 'done') return
+    clozeOnboardingVisible.value = true
+  } catch {
+    // localStorage 不可用时仍允许本次进入显示引导。
+    clozeOnboardingVisible.value = true
+  }
+}
+
+function closeClozeOnboarding() {
+  clozeOnboardingVisible.value = false
+  const storage = getClozeDraftStorage()
+  if (!storage) return
+  try {
+    storage.setItem(clozeOnboardingStorageKey(), 'done')
+  } catch {
+    // localStorage 不可用时只关闭当前引导，不影响练习。
+  }
 }
 
 function clozeDraftStorageKey(userId = getClozeStorageUserId(), quizId = quiz.value?.quizId) {
@@ -1622,6 +1652,7 @@ onMounted(async () => {
   } else {
     restoreActiveClozeTask()
   }
+  showClozeOnboardingIfNeeded()
   document.addEventListener('selectionchange', handlePassageSelectionChange)
   window.addEventListener('keydown', handleClozeKeydown)
   window.addEventListener('scroll', scheduleLookupSelectionUpdate, true)
@@ -1707,7 +1738,25 @@ onBeforeUnmount(() => {
           <el-card v-if="quiz" class="panel-card mt-16" shadow="never">
             <template #header>
               <div class="card-header-row">
-                <span>{{ quiz.title || '完形填空练习' }}</span>
+                <div class="cloze-title-group">
+                  <span>{{ quiz.title || '完形填空练习' }}</span>
+                  <el-popover placement="bottom-start" :width="320" trigger="click">
+                    <template #reference>
+                      <button
+                        class="cloze-reading-tip-button"
+                        type="button"
+                        title="读题技巧"
+                        aria-label="读题技巧"
+                      >
+                        <el-icon><InfoFilled /></el-icon>
+                      </button>
+                    </template>
+                    <div class="cloze-reading-tip-popover">
+                      <strong>读题技巧</strong>
+                      <p>先看句子开头和结尾的单词或词组的释义, 再找主语、谓语、宾语和转折词，最后结合空格前后的单词上下文判断。</p>
+                    </div>
+                  </el-popover>
+                </div>
                 <div v-if="attempt" class="cloze-card-actions">
                   <el-button
                     size="small"
@@ -2033,6 +2082,48 @@ onBeforeUnmount(() => {
 
       </div>
     </template>
+
+    <el-dialog
+      v-model="clozeOnboardingVisible"
+      class="cloze-onboarding-dialog"
+      title="第一次做完形填空？"
+      width="min(520px, calc(100vw - 32px))"
+      append-to-body
+      @closed="closeClozeOnboarding"
+    >
+      <p class="cloze-onboarding-lead">不用一开始就认识每个词，先按下面的顺序读和做。</p>
+      <div class="cloze-onboarding-steps">
+        <div class="cloze-onboarding-step">
+          <span class="cloze-onboarding-step-number">1</span>
+          <div>
+            <strong>先读句子</strong>
+            <p>先看句子开头和结尾的单词或词组的释义, 再找主语、谓语、宾语和转折词，再看空格前后的搭配。</p>
+          </div>
+        </div>
+        <div class="cloze-onboarding-step">
+          <span class="cloze-onboarding-step-number">2</span>
+          <div>
+            <strong>选择或输入答案</strong>
+            <p>可以点击候选词，也可以直接按对应字母键（如 A、B、C）。</p>
+          </div>
+        </div>
+        <div class="cloze-onboarding-step">
+          <span class="cloze-onboarding-step-number">3</span>
+          <div>
+            <strong>卡住时再用提示</strong>
+            <p>悬停空格显示提示按钮，按顺序查看词性和中文释义。</p>
+          </div>
+        </div>
+      </div>
+      <div class="cloze-onboarding-tip">
+        <strong>阅读技巧</strong>
+        <span>先看句子开头和结尾的单词或词组的释义, 这样能帮助快速定位大意, 更容易理解句子含义, 之后再看句子主干(主谓宾)和上下文。</span>
+      </div>
+      <template #footer>
+        <el-button @click="closeClozeOnboarding">跳过引导</el-button>
+        <el-button type="primary" @click="closeClozeOnboarding">开始练习</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="lookupVisible" class="cloze-lookup-dialog" width="420px" append-to-body @closed="closeLookup">
       <template #header>

@@ -2451,6 +2451,120 @@ body.study-ai-dialog-open .app-main .content-wrap {
   white-space: pre-wrap;
 }
 
+.cloze-title-group {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.cloze-reading-tip-button {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: #0f9f99;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.cloze-reading-tip-button:hover,
+.cloze-reading-tip-button:focus-visible {
+  border-color: rgba(14, 165, 166, 0.2);
+  background: #effcfb;
+  color: #087f7a;
+  outline: none;
+}
+
+.cloze-reading-tip-popover {
+  color: var(--text, #334155);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cloze-reading-tip-popover strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--heading, #1e293b);
+  font-size: 14px;
+}
+
+.cloze-reading-tip-popover p {
+  margin: 0;
+}
+
+.cloze-onboarding-dialog .el-dialog {
+  border-radius: 12px;
+}
+
+.cloze-onboarding-lead {
+  margin: 0 0 18px;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.65;
+}
+
+.cloze-onboarding-steps {
+  display: grid;
+  gap: 14px;
+}
+
+.cloze-onboarding-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.cloze-onboarding-step-number {
+  display: inline-flex;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary, #14b8a6);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.cloze-onboarding-step strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-primary, #1e293b);
+}
+
+.cloze-onboarding-step p {
+  margin: 0;
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cloze-onboarding-tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 20px;
+  padding: 11px 12px;
+  border-left: 3px solid #14b8a6;
+  background: #f0fdfa;
+  color: #335b5b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cloze-onboarding-tip strong {
+  flex: 0 0 auto;
+  color: #0f766e;
+}
+
 .cloze-candidates,
 .cloze-submit-row,
 .answer-result,
