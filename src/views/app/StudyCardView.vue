@@ -67,6 +67,9 @@ const retryBatches = ref([])
 const nextRetryItems = ref([])
 const missedItems = ref([])
 const failedFeedbackItemIds = ref(new Set())
+const failedFeedbackDates = ref({})
+const pendingFeedback = ref(null)
+let cardStartedAt = Date.now()
 const choiceState = ref(CHOICE_IDLE)
 const choiceItemId = ref(null)
 const selectedOptionWordId = ref(null)
@@ -896,6 +899,8 @@ function saveFlowState() {
     nextRetryItemIds: idsFromPendingItems(nextRetryItems.value, pendingItemMap),
     missedItemIds: idsFromPendingItems(missedItems.value, pendingItemMap),
     failedFeedbackItemIds: [...failedFeedbackItemIds.value].filter((itemId) => pendingItemMap.has(String(itemId))),
+    failedFeedbackDates: failedFeedbackDates.value,
+    pendingFeedback: pendingFeedback.value,
     choiceState: persistChoiceItemId ? choiceState.value : CHOICE_IDLE,
     choiceItemId: persistChoiceItemId,
     selectedOptionWordId: persistChoiceItemId ? selectedOptionWordId.value : null,
@@ -961,6 +966,9 @@ function restoreLocalFlow() {
       .map((itemId) => String(itemId))
       .filter((itemId) => pendingItemMap.has(itemId)),
   )
+  failedFeedbackDates.value = cache.failedFeedbackDates || {}
+  pendingFeedback.value = cache.pendingFeedback && pendingItemMap.has(String(cache.pendingFeedback.itemId))
+    ? cache.pendingFeedback : null
 
   if (flowMode.value === FLOW_RETRY) {
     if (!retryBatches.value.length) {
@@ -983,6 +991,7 @@ function restoreLocalFlow() {
     const canRestoreReveal = cache.phase === PHASE_REVIEW_REVEAL
       && String(cache.activeItemId) === currentItemIdString()
       && failedFeedbackItemIds.value.has(currentItemIdString())
+      && failedFeedbackDates.value[currentItemIdString()] === feedbackBusinessDate()
     phase.value = canRestoreReveal ? PHASE_REVIEW_REVEAL : PHASE_CONFIRM
   }
   restoreChoiceState(cache)
@@ -1039,6 +1048,8 @@ function resetLocalFlow(persist = true) {
   nextRetryItems.value = []
   missedItems.value = []
   failedFeedbackItemIds.value = new Set()
+  failedFeedbackDates.value = {}
+  pendingFeedback.value = null
   resetChoiceState()
   if (!pendingItems.value.length) {
     clearFlowState()
@@ -1063,6 +1074,7 @@ async function loadCard() {
   stopAiTaskPolling(false)
   try {
     card.value = await fetchTaskItemCard(currentItem.value.itemId)
+    cardStartedAt = Date.now()
     aiResult.value = null
     aiQuestion.value = ''
     restoreActiveAiTaskForCard()
@@ -1134,7 +1146,7 @@ async function goNextLearnCard() {
 async function forgetCurrentCard() {
   if (!currentItem.value || submitting.value || generatingCloze.value) return
   const item = currentItem.value
-  await submitUnknownOnce(item)
+  await submitUnknown(item)
   if (flowMode.value === FLOW_RETRY) {
     addUniqueItem(nextRetryItems, item)
   } else {
@@ -1150,15 +1162,51 @@ async function forgetCurrentCard() {
   await advanceAfterConfirm()
 }
 
-async function submitUnknownOnce(item) {
+function feedbackBusinessDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+}
+
+function feedbackAttemptType(item) {
+  if (flowMode.value === FLOW_RETRY) return 'IN_DAY_RETRY'
+  if (isWrongPracticeTask.value || item.itemType === ITEM_TYPE_EXTRA) return 'IN_DAY_RETRY'
+  if (failedFeedbackDates.value[String(item.itemId)] === feedbackBusinessDate()) return 'IN_DAY_RETRY'
+  return item.itemType === ITEM_TYPE_REVIEW ? 'FORMAL_REVIEW' : 'INITIAL_LEARNING'
+}
+
+async function submitCardAttempt(item, feedback) {
   const itemId = String(item.itemId)
-  if (failedFeedbackItemIds.value.has(itemId)) return null
+  // 响应丢失时保留原请求；再次点击或刷新后重试仍使用同一个 attemptId。
+  if (pendingFeedback.value && (pendingFeedback.value.itemId !== itemId || pendingFeedback.value.feedback !== feedback)) {
+    ElMessage.warning('上一次反馈尚未确认，请先重试原来的选择。')
+    throw new Error('待确认反馈尚未完成')
+  }
+  if (!pendingFeedback.value) {
+    pendingFeedback.value = {
+      itemId, feedback,
+      attemptId: Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+      attemptType: feedbackAttemptType(item),
+      durationSeconds: Math.min(3600, Math.max(0, Math.round((Date.now() - cardStartedAt) / 1000))),
+    }
+    saveFlowState()
+  }
+  const { itemId: ignoredItemId, ...request } = pendingFeedback.value
+  const response = await submitTaskFeedback(item.itemId, request)
+  pendingFeedback.value = null
+  if (feedback === 'UNKNOWN') {
+    markFailedFeedbackSubmitted(itemId)
+    failedFeedbackDates.value[itemId] = feedbackBusinessDate()
+  }
+  cardStartedAt = Date.now()
+  saveFlowState()
+  return response
+}
+
+async function submitUnknown(item) {
   submitting.value = true
   try {
-    const response = await submitTaskFeedback(item.itemId, { feedback: 'UNKNOWN', durationSeconds: 0 })
-    markFailedFeedbackSubmitted(itemId)
-    saveFlowState()
-    return response
+    return await submitCardAttempt(item, 'UNKNOWN')
   } finally {
     submitting.value = false
   }
@@ -1191,7 +1239,7 @@ async function selectChoiceOption(option) {
   if (correct) {
     submitting.value = true
     try {
-      const response = await submitTaskFeedback(item.itemId, { feedback: 'KNOWN', durationSeconds: 0 })
+      const response = await submitCardAttempt(item, 'KNOWN')
       applyFeedbackProgress(response)
       choiceFeedback.value = 'KNOWN'
       choiceSubmitted.value = true
@@ -1204,7 +1252,7 @@ async function selectChoiceOption(option) {
     return
   }
 
-  await submitUnknownOnce(item)
+  await submitUnknown(item)
   if (flowMode.value === FLOW_RETRY) {
     addUniqueItem(nextRetryItems, item)
   } else {

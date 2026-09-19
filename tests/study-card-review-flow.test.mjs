@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import vm from 'node:vm'
+import { webcrypto } from 'node:crypto'
 import { computed, ref } from 'vue'
 
 // Exercise the real setup functions with Vue reactivity; only browser/API boundaries are mocked.
@@ -17,7 +18,7 @@ function createFlow(types = ['REVIEW', 'REVIEW']) {
     choiceQuestion: { correctIndex: 0, options: [1, 2, 3, 4].map((id) => ({ wordId: String(id) })) },
   })
   const context = vm.createContext({
-    computed, ref, nextTick: async () => {}, watch: () => {}, onMounted: () => {}, onBeforeUnmount: () => {},
+    crypto: webcrypto, computed, ref, nextTick: async () => {}, watch: () => {}, onMounted: () => {}, onBeforeUnmount: () => {},
     useRoute: () => ({ query: {} }), useRouter: () => ({ push: () => {} }),
     useAuthStore: () => ({ user: { id: 'user' } }),
     MarkdownIt: class {}, ElMessage: { warning: () => {} },

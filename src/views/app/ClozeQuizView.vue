@@ -675,6 +675,7 @@ async function submitAnswers() {
   try {
     const durationSeconds = startedAt.value ? Math.max(0, Math.round((Date.now() - startedAt.value) / 1000)) : 0
     attempt.value = await submitClozeAttempt(quiz.value.quizId, {
+      attemptType: 'QUIZ',
       durationSeconds,
       answers: quiz.value.blanks.map((blank) => ({ blankId: blank.blankId, answer: answers[blank.blankId] })),
     })
