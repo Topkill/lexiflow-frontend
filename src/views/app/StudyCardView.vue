@@ -26,6 +26,7 @@ const FLOW_SEGMENT = 'segment'
 const FLOW_RETRY = 'retry'
 const PHASE_LEARN = 'learn'
 const PHASE_CONFIRM = 'confirm'
+const PHASE_REVIEW_REVEAL = 'review-reveal'
 const CHOICE_IDLE = 'idle'
 const CHOICE_CHOOSING = 'choosing'
 const CHOICE_RESULT = 'result'
@@ -144,7 +145,7 @@ const isLegacyPendingTask = computed(() => {
   return String(task.value.taskDate) < todayDateString()
 })
 const recallMode = computed(() => phase.value === PHASE_CONFIRM)
-const learningMode = computed(() => phase.value === PHASE_LEARN)
+const learningMode = computed(() => phase.value === PHASE_LEARN || phase.value === PHASE_REVIEW_REVEAL)
 const pageTitle = computed(() => (isWrongPracticeTask.value ? '错词专项复习' : '单词学习'))
 const pageSubtitle = computed(() => {
   const groupLabel = `第 ${task.value?.groupNo || 1} 组`
@@ -171,10 +172,12 @@ const studyStageLabel = computed(() => {
   return label.endsWith('重练') ? label : `${label}重练`
 })
 const learnActionLabel = computed(() => {
+  if (phase.value === PHASE_REVIEW_REVEAL) return '继续复习'
   return activeIndex.value >= activeItems.value.length - 1 ? '开始回忆' : '下一个'
 })
 const flowHint = computed(() => {
   if (generatingCloze.value) return '本组单词学习已完成，正在生成必做完形填空。'
+  if (phase.value === PHASE_REVIEW_REVEAL) return '先查看这个词的释义，稍后会再次重练。'
   if (!learningMode.value && choiceState.value === CHOICE_CHOOSING) return '选择你想起的中文释义，答完后再进入下一个词。'
   if (!learningMode.value && choiceState.value === CHOICE_RESULT) return isChoiceCorrect.value ? '验证通过，点下一个继续。' : '正确答案已标出，后面会进入重练。'
   if (flowMode.value === FLOW_RETRY) {
@@ -733,6 +736,10 @@ function resetChoiceState() {
   choiceDailyTaskDone.value = false
 }
 
+function initialSegmentPhase() {
+  return currentFlowGroup.value?.key === ITEM_TYPE_REVIEW ? PHASE_CONFIRM : PHASE_LEARN
+}
+
 function currentItemIdString() {
   return currentItem.value?.itemId == null ? null : String(currentItem.value.itemId)
 }
@@ -971,6 +978,13 @@ function restoreLocalFlow() {
     activeIndex.value = resolveActiveIndex(currentSegmentItems.value, cache.activeItemId, cache.activeIndex)
   }
 
+  // 旧缓存中的复习学习阶段也应先回忆；仅已提交失败的当前词可恢复释义页。
+  if (flowMode.value === FLOW_SEGMENT && initialSegmentPhase() === PHASE_CONFIRM) {
+    const canRestoreReveal = cache.phase === PHASE_REVIEW_REVEAL
+      && String(cache.activeItemId) === currentItemIdString()
+      && failedFeedbackItemIds.value.has(currentItemIdString())
+    phase.value = canRestoreReveal ? PHASE_REVIEW_REVEAL : PHASE_CONFIRM
+  }
   restoreChoiceState(cache)
   saveFlowState()
   return true
@@ -1019,7 +1033,7 @@ function resetLocalFlow(persist = true) {
   segmentIndex.value = firstSegmentIndex >= 0 ? firstSegmentIndex : 0
   activeIndex.value = 0
   flowMode.value = FLOW_SEGMENT
-  phase.value = PHASE_LEARN
+  phase.value = initialSegmentPhase()
   retryItems.value = []
   retryBatches.value = []
   nextRetryItems.value = []
@@ -1100,6 +1114,11 @@ async function playPronunciation(type) {
 async function goNextLearnCard() {
   if (!card.value || submitting.value || generatingCloze.value) return
   resetChoiceState()
+  if (phase.value === PHASE_REVIEW_REVEAL) {
+    phase.value = PHASE_CONFIRM
+    await advanceAfterConfirm()
+    return
+  }
   if (activeIndex.value < activeItems.value.length - 1) {
     activeIndex.value += 1
     saveFlowState()
@@ -1122,6 +1141,11 @@ async function forgetCurrentCard() {
     addUniqueItem(missedItems, item)
   }
   resetChoiceState()
+  if (flowMode.value === FLOW_SEGMENT && currentItemTypeKey.value === ITEM_TYPE_REVIEW) {
+    phase.value = PHASE_REVIEW_REVEAL
+    saveFlowState()
+    return
+  }
   saveFlowState()
   await advanceAfterConfirm()
 }
@@ -1229,7 +1253,7 @@ async function finishSegmentRound() {
   if (segmentIndex.value < itemBatches.value.length - 1) {
     segmentIndex.value += 1
     activeIndex.value = 0
-    phase.value = PHASE_LEARN
+    phase.value = initialSegmentPhase()
     resetChoiceState()
     saveFlowState()
     await loadCard()
@@ -1283,7 +1307,7 @@ async function moveToNextFlowGroup() {
     segmentIndex.value = firstAvailableBatchIndex(itemBatches.value, 0)
     activeIndex.value = 0
     flowMode.value = FLOW_SEGMENT
-    phase.value = PHASE_LEARN
+    phase.value = initialSegmentPhase()
     retryItems.value = []
     retryBatches.value = []
     nextRetryItems.value = []
