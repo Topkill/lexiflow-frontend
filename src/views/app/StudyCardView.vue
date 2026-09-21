@@ -80,6 +80,7 @@ const card = ref(null)
 const emptyTitle = ref('暂无待学习卡片')
 const emptyDescription = ref('本组完成后可以继续下一组，也可以回到首页查看统计。')
 const needsPlan = ref(false)
+const completed = ref(false)
 const aiDialogVisible = ref(false)
 const aiLoading = ref(false)
 const aiRegenerating = ref(false)
@@ -1006,6 +1007,7 @@ async function loadTask() {
     cleanupExpiredStudyFlowStates()
     task.value = queryTaskId.value ? await fetchStudyTask(queryTaskId.value) : await fetchTodayTask()
     needsPlan.value = false
+    completed.value = false
     emptyTitle.value = isWrongPracticeTask.value ? '错词专项已完成' : '暂无待学习卡片'
     emptyDescription.value = isWrongPracticeTask.value
       ? '本组错词已处理，可以返回错词本或继续下一组。'
@@ -1025,10 +1027,15 @@ async function loadTask() {
     task.value = null
     card.value = null
     needsPlan.value = error.code === 30001
-    emptyTitle.value = needsPlan.value ? '先创建学习计划' : '暂时无法加载学习卡片'
+    completed.value = error.code === 30005
+    emptyTitle.value = needsPlan.value
+      ? '先创建学习计划'
+      : completed.value ? '词库已全部学完' : '暂时无法加载学习卡片'
     emptyDescription.value = needsPlan.value
       ? '选择词库并设置每组新词和复习词后，就可以开始学习。'
-      : error.message
+      : completed.value
+        ? '本词库单词已全部学过，当前没有到期复习任务。可以查看学习统计，或明天再来。'
+        : error.message
   } finally {
     loading.value = false
   }
