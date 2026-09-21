@@ -41,7 +41,6 @@ onMounted(loadWordbooks)
         <p>{{ book.description || '系统内置考试词库' }}</p>
         <div class="wordbook-meta">
           <span>难度 {{ book.difficultyLevel }}</span>
-          <span>进度 {{ book.progress?.learnedCount ?? 0 }}/{{ book.wordCount || 0 }}</span>
         </div>
         <el-button type="primary" :icon="Calendar" @click="router.push({ path: '/app/plans', query: { wordbookId: book.id } })">
           制定计划
