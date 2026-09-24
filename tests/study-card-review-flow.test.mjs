@@ -10,7 +10,7 @@ const component = readFileSync(new URL('../src/views/app/StudyCardView.vue', imp
 const setup = component.match(/<script setup>([\s\S]*?)<\/script>/)[1]
   .replace(/^import[\s\S]*?from ['"][^'"]+['"]\r?$/gm, '')
 
-function createFlow(types = ['REVIEW', 'REVIEW']) {
+function createFlow(types = ['REVIEW', 'REVIEW'], options = {}) {
   let saved
   const submissions = []
   const makeCard = (itemId) => ({
@@ -27,7 +27,12 @@ function createFlow(types = ['REVIEW', 'REVIEW']) {
     writeStudyFlowState: (_user, _task, state) => { saved = JSON.parse(JSON.stringify(state)) },
     removeStudyFlowState: () => { saved = undefined },
     fetchTaskItemCard: async (id) => makeCard(id),
-    submitTaskFeedback: async (itemId, request) => { submissions.push({ itemId, ...request }); return {} },
+    submitTaskFeedback: async (itemId, request) => {
+      submissions.push({ itemId, ...request })
+      // 模拟"服务端已收到、但响应在网络上丢了"：第一次抛错，之后正常返回
+      if (options.failFirstSubmit && submissions.length === 1) throw new Error('network down')
+      return {}
+    },
   })
   vm.runInContext(`${setup}\nglobalThis.flow = {
     task, card, phase, learningMode, choiceState, flowMode, currentItem, missedItems,
@@ -119,4 +124,36 @@ test('legacy learn caches and unconfirmed reveal caches cannot expose review ans
   assert.equal(flow.restoreLocalFlow(), true)
   assert.equal(flow.learningMode.value, false)
   assert.equal(getCache().phase, 'confirm')
+})
+
+test('a dropped response is retried with the same attemptId, so the backend can dedupe it', async () => {
+  const { flow, submissions } = createFlow(undefined, { failFirstSubmit: true })
+
+  await assert.rejects(() => flow.forgetCurrentCard(), /network down/)
+  assert.equal(submissions.length, 1, '首次提交应已发出')
+  const firstAttemptId = submissions[0].attemptId
+  assert.ok(firstAttemptId && firstAttemptId.length === 32, '应生成 128-bit attemptId')
+  assert.equal(flow.phase.value, 'confirm', '提交未确认前不应进入揭示阶段')
+
+  // 用户再次点"不认识"：必须复用同一个 attemptId，否则后端会当成新尝试重复计数
+  await flow.forgetCurrentCard()
+  assert.equal(submissions.length, 2, '重试应再次发出请求')
+  assert.equal(submissions[1].attemptId, firstAttemptId, '重试必须复用同一个 attemptId')
+  assert.equal(submissions[1].feedback, 'UNKNOWN')
+  assert.equal(flow.phase.value, 'review-reveal', '重试成功后才能揭示释义')
+})
+
+test('a pending feedback survives a refresh and is not replaced by a new attemptId', async () => {
+  const { flow, submissions } = createFlow(undefined, { failFirstSubmit: true })
+
+  await assert.rejects(() => flow.forgetCurrentCard(), /network down/)
+  const pendingAttemptId = submissions[0].attemptId
+
+  // 模拟刷新：从持久化缓存恢复后，待确认反馈仍在
+  assert.equal(flow.restoreLocalFlow(), true)
+  assert.equal(flow.phase.value, 'confirm', '恢复时不应直接揭示释义')
+
+  await flow.forgetCurrentCard()
+  assert.equal(submissions.length, 2)
+  assert.equal(submissions[1].attemptId, pendingAttemptId, '刷新后重试仍应复用原 attemptId')
 })

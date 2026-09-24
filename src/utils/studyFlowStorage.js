@@ -5,6 +5,18 @@ function canUseStorage() {
   return typeof localStorage !== 'undefined'
 }
 
+/**
+ * 安全删除：存储被禁用（隐私模式 / 企业策略）或访问本身抛错时，清理失败不应影响学习流程。
+ * 读路径的 catch 分支也会调用它——若这里再抛，异常会从错误处理里逃出去。
+ */
+function safeRemove(key) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // 忽略：缓存清理属于尽力而为
+  }
+}
+
 function buildKey(userId, dailyTaskId) {
   if (!userId || !dailyTaskId) return null
   return `${PREFIX}${String(userId)}:${String(dailyTaskId)}`
@@ -54,7 +66,7 @@ export function readStudyFlowState(userId, dailyTaskId) {
     if (!raw) return null
     const state = JSON.parse(raw)
     if (String(state?.dailyTaskId) !== String(dailyTaskId) || isExpired(state)) {
-      localStorage.removeItem(key)
+      safeRemove(key)
       return null
     }
     return {
@@ -72,7 +84,7 @@ export function readStudyFlowState(userId, dailyTaskId) {
       choiceSubmitted: Boolean(state.choiceSubmitted),
     }
   } catch {
-    localStorage.removeItem(key)
+    safeRemove(key)
     return null
   }
 }
@@ -114,22 +126,31 @@ export function removeStudyFlowState(userId, dailyTaskId) {
   if (!canUseStorage()) return
   const key = buildKey(userId, dailyTaskId)
   if (!key) return
-  localStorage.removeItem(key)
+  safeRemove(key)
 }
 
 export function cleanupExpiredStudyFlowStates() {
   if (!canUseStorage()) return
   const now = Date.now()
-  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-    const key = localStorage.key(index)
+  let total
+  try {
+    total = localStorage.length
+  } catch {
+    return
+  }
+  for (let index = total - 1; index >= 0; index -= 1) {
+    let key
+    try {
+      key = localStorage.key(index)
+    } catch {
+      return
+    }
     if (!key?.startsWith(PREFIX)) continue
     try {
       const state = JSON.parse(localStorage.getItem(key) || 'null')
-      if (isExpired(state, now)) {
-        localStorage.removeItem(key)
-      }
+      if (isExpired(state, now)) safeRemove(key)
     } catch {
-      localStorage.removeItem(key)
+      safeRemove(key)
     }
   }
 }
