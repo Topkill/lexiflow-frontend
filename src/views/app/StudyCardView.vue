@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Calendar, ChatLineRound, Cpu, DocumentAdd, Refresh } from '@element-plus/icons-vue'
+import { Calendar, ChatLineRound, CircleCheck, Cpu, DocumentAdd, Refresh } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import LexiIcon from '../../components/LexiIcon.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -1879,12 +1879,16 @@ onBeforeUnmount(() => {
       <StarterPanel
         :title="emptyTitle"
         :description="emptyDescription"
-        :icon="needsPlan ? Calendar : Refresh"
-        :error="!needsPlan"
+        :icon="needsPlan ? Calendar : completed ? CircleCheck : Refresh"
+        :error="!needsPlan && !completed"
       >
         <template v-if="needsPlan">
           <el-button type="primary" @click="router.push('/app/plans')">创建计划</el-button>
           <el-button @click="router.push('/app/wordbooks')">选择词库</el-button>
+        </template>
+        <template v-else-if="completed">
+          <el-button type="primary" @click="router.push('/app/statistics')">查看学习统计</el-button>
+          <el-button @click="router.push('/app/wordbooks')">更换词库</el-button>
         </template>
         <template v-else-if="completedWrongPractice">
           <el-button type="primary" @click="router.push('/app/wrong-words')">返回错词本</el-button>
